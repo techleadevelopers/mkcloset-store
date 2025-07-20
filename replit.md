@@ -1,143 +1,152 @@
-# replit.md
+Documentação do Projeto
+Estrutura Geral
+O projeto é uma aplicação de e-commerce que permite aos usuários navegar por produtos, gerenciar um carrinho de compras e realizar pedidos.
 
-## Overview
+Componentes Principais
+Shopping Cart (shopping-cart.tsx)
 
-This is a full-stack e-commerce application built as a React/TypeScript frontend with an Express.js backend. The application is designed for a fashion retail store called "MKcloset" specializing in women's clothing. It features a modern, responsive design with a black and gray monochromatic color scheme and includes shopping cart functionality, wishlist management, product browsing, and interface-only checkout (no payment processing).
+Descrição: Componente que exibe os itens no carrinho de compras.
+Funcionalidades: Exibir itens do carrinho, calcular e mostrar o total, permitir a finalização da compra.
+Estado:
+isCartOpen: Controla se o carrinho está aberto.
+items: Lista de itens no carrinho.
+total: Total a pagar.
+Funções:
+handleCheckout: Redireciona para a página de checkout.
+handleClose: Fecha o carrinho.
+Cart Item (cart-item.tsx)
 
-## System Architecture
+Descrição: Componente que representa um item individual no carrinho.
+Funcionalidades: Mostrar detalhes do produto, permitir alteração da quantidade e remoção do item.
+Estado: Utiliza propriedades passadas (item do carrinho).
+Funções:
+handleDecrease: Diminui a quantidade.
+handleIncrease: Aumenta a quantidade.
+handleRemove: Remove o item do carrinho.
+Header (header.tsx)
 
-### Frontend Architecture
-- **Framework**: React 18 with TypeScript
-- **Build Tool**: Vite for development and production builds
-- **UI Framework**: Tailwind CSS with shadcn/ui component library
-- **State Management**: 
-  - Zustand for UI state (cart open/close, mobile menu)
-  - React Query (TanStack Query) for server state management
-  - React Context for cart and wishlist providers
-- **Routing**: Wouter (lightweight client-side routing)
-- **Styling**: Tailwind CSS with custom CSS variables for theming
+Descrição: Barra de navegação superior da aplicação.
+Funcionalidades: Exibir navegação entre páginas, busca de produtos.
+Estado: Controla a busca e o estado do menu mobile.
+Funções:
+handleSearch: Processa a busca.
+Footer (footer.tsx)
 
-### Backend Architecture
-- **Framework**: Express.js with TypeScript
-- **Database**: PostgreSQL with Drizzle ORM
-- **Session Management**: Express sessions with memory store
-- **Payment Processing**: Stripe integration
-- **Build Tool**: esbuild for production builds
+Descrição: Rodapé da aplicação.
+Funcionalidades: Informações de contato e links úteis, seção de categorias e suporte.
+Product Card (product-card.tsx)
 
-### Database Design
-- **ORM**: Drizzle with PostgreSQL dialect
-- **Tables**: categories, products, cart_items, wishlist_items, orders, order_items
-- **Schema Location**: `shared/schema.ts` for type safety across frontend/backend
+Descrição: Exibe informações de um produto.
+Funcionalidades: Permitir adicionar produtos ao carrinho ou à wishlist.
+Estado: Controle de adição ao carrinho.
+Alert Dialog (alert-dialog.tsx)
 
-## Key Components
+Descrição: Componente para exibir diálogos de alerta.
+Funcionalidades: Permitir ao usuário confirmar ou cancelar ações.
+Elementos: Inclui Dialog, DialogContent, DialogClose, entre outros.
+Slider (slider.tsx)
 
-### Frontend Components
-1. **Layout Components**
-   - Header with navigation, search, cart, and wishlist
-   - Footer with newsletter signup and links
-   - Responsive mobile menu
+Descrição: Componente para exibir um controle deslizante.
+Funcionalidades: Permitir a seleção de valores em um intervalo.
+Tabs (tabs.tsx)
 
-2. **Product Components**
-   - Product cards with hover effects and quick actions
-   - Product detail pages with image galleries
-   - Category filtering and search functionality
+Descrição: Componente para exibir conteúdo em abas.
+Funcionalidades: Permitir navegação entre diferentes seções de conteúdo.
+Table (table.tsx)
 
-3. **Shopping Features**
-   - Shopping cart sidebar with item management
-   - Wishlist functionality with heart icons
-   - Checkout form with Stripe Elements integration
+Descrição: Componente para exibir dados em formato de tabela.
+Funcionalidades: Permitir a organização e visualização de dados tabulares.
+Tooltip (tooltip.tsx)
 
-4. **UI Components**
-   - Complete shadcn/ui component library
-   - Custom styled components with purple/pink theme
-   - Responsive design with mobile-first approach
+Descrição: Componente para exibir dicas ou informações adicionais ao passar o mouse.
+Funcionalidades: Exibir informações contextuais.
+Badge (badge.tsx)
 
-### Backend Services
-1. **Product Management**
-   - CRUD operations for products and categories
-   - Search functionality across products
-   - Featured products endpoint
+Descrição: Componente para exibir etiquetas de status ou contagem.
+Funcionalidades: Mostrar pequenas informações ou contadores.
+Checkbox (checkbox.tsx)
 
-2. **Shopping Cart**
-   - Session-based cart management
-   - Add/update/remove cart items
-   - Size and color variant support
+Descrição: Componente para opções de seleção.
+Funcionalidades: Permitir que os usuários selecionem uma ou mais opções.
+Radio Group (radio-group.tsx)
 
-3. **Order Processing**
-   - Stripe payment intent creation
-   - Order creation and status management
-   - Integration with cart clearing
+Descrição: Componente para seleção única entre várias opções.
+Funcionalidades: Permitir que os usuários escolham uma única opção de uma lista.
+Input (input.tsx)
 
-## Data Flow
+Descrição: Componente de entrada de texto.
+Funcionalidades: Permitir a entrada de dados do usuário.
+Textarea (textarea.tsx)
 
-1. **Product Browsing**: Frontend uses local mock data from `lib/mock-data.ts` with filtering and search
-2. **Cart Management**: localStorage-based cart with React context for state management and real-time UI updates
-3. **Wishlist**: localStorage-based wishlist with React context for persistence and synchronization
-4. **Checkout Process**: 
-   - Frontend-only interface simulation
-   - Form validation and user data collection
-   - Mock payment processing interface
-   - Cart clearing with success feedback
+Descrição: Componente para entrada de texto em múltiplas linhas.
+Funcionalidades: Permitir a entrada de textos longos.
+Skeleton (skeleton.tsx)
 
-## External Dependencies
+Descrição: Componente de carregamento.
+Funcionalidades: Mostrar um estado de carregamento visual.
+Checkbox Group (checkbox-group.tsx)
 
-### Frontend Dependencies
-- React Query for server state management
-- Stripe React components for payment processing
-- Radix UI primitives for accessible components
-- Tailwind CSS for styling
-- Wouter for routing
+Descrição: Agrupamento de checkboxes.
+Funcionalidades: Permitir a seleção de múltiplas opções.
+Sidebar (sidebar.tsx)
 
-### Backend Dependencies
-- Drizzle ORM for database operations
-- Stripe for payment processing
-- Express sessions for state management
-- Neon Database for PostgreSQL hosting
+Descrição: Componente para navegação lateral.
+Funcionalidades: Exibir links de navegação e opções.
+Carousel (carousel.tsx)
 
-### Development Tools
-- Vite with React plugin
-- TypeScript for type safety
-- ESBuild for backend bundling
-- Replit-specific plugins for development environment
+Descrição: Componente para exibir itens em um carrossel.
+Funcionalidades: Permitir a rotação de itens.
+Progress (progress.tsx)
 
-## Deployment Strategy
+Descrição: Componente para mostrar progresso.
+Funcionalidades: Indicar o andamento de uma tarefa.
+Context Menu (context-menu.tsx)
 
-### Development
-- Vite dev server for frontend with HMR
-- tsx for running TypeScript backend in development
-- Shared types between frontend and backend via `shared/` directory
+Descrição: Menu de contexto.
+Funcionalidades: Exibir opções relacionadas ao contexto.
+Dropdown Menu (dropdown-menu.tsx)
 
-### Production Build
-- Frontend: Vite build outputs to `dist/public`
-- Backend: esbuild bundles server to `dist/index.js`
-- Static file serving from Express in production
+Descrição: Componente para menus suspensos.
+Funcionalidades: Exibir opções em um menu dropdown.
+Command (command.tsx)
 
-### Environment Configuration
-- Database URL for PostgreSQL connection
-- Stripe keys (public and secret)
-- Session secret for security
+Descrição: Interface para comandos.
+Funcionalidades: Permitir a execução de ações.
+Popover (popover.tsx)
 
-## Changelog
-- July 08, 2025. Initial setup with pink/lilac color scheme
-- July 08, 2025. Complete color scheme redesign from pink/lilac to black and gray monochromatic palette. Updated all pages including login, register, checkout, wishlist, order-success, and header components to use the new color scheme.
-- July 08, 2025. Integrated ultra-modern WhatsApp button with multiple visual effects:
-  - Floating button with glow effects, ripples, and pulsing animations
-  - Hover effects with scale transformation and dynamic shadows
-  - Mobile notification bubble for better mobile UX
-  - Tooltip with smooth animations
-  - Sparkle effects and gradient backgrounds
-  - Added to all main pages (home, products, checkout, product-detail)
-- July 08, 2025. Complete migration to frontend-only architecture:
-  - Replaced all backend API calls with localStorage-based mock data system
-  - Cart and wishlist now use only frontend state management with persistence
-  - Added realistic loading delays (800ms for cart, 300ms for wishlist) 
-  - Enhanced cart notification system with product preview and animations
-  - Implemented comprehensive checkout flow integrated with cart
-  - All data operations now independent of backend server
+Descrição: Componente para exibir conteúdo em um popover.
+Funcionalidades: Exibir informações adicionais.
+Drawer (drawer.tsx)
 
-## User Preferences
+Descrição: Componente para menu deslizante.
+Funcionalidades: Exibir opções de navegação em um painel deslizante.
+Form (form.tsx)
 
-Preferred communication style: Simple, everyday language.
-User language: Portuguese
-Design preference: Black and gray color scheme, no purple or lilac colors
-Focus: Interface design only, no payment processing functionality
+Descrição: Componente para gerenciar formulários.
+Funcionalidades: Facilitar a manipulação de entradas e validações.
+Toast (toast.tsx)
+
+Descrição: Notificações temporárias.
+Funcionalidades: Exibir mensagens de feedback ao usuário.
+Toaster (toaster.tsx)
+
+Descrição: Gerencia a exibição de toasts.
+Funcionalidades: Agrupar e exibir notificações.
+Avatar (avatar.tsx)
+
+Descrição: Componente para exibir imagens de perfil.
+Funcionalidades: Mostrar avatares de usuários.
+Aspect Ratio (aspect-ratio.tsx)
+
+Descrição: Componente para manter proporção de elementos.
+Funcionalidades: Controlar a razão de aspecto.
+Resizer (resizable.tsx)
+
+Descrição: Componente para redimensionar áreas.
+Funcionalidades: Permitir ajustar o tamanho de elementos.
+Slider (slider.tsx)
+
+Descrição: Componente para seleção de valores em um intervalo.
+Funcionalidades: Permitir ajustes de valores.
+Conclusão
+Essa documentação serve para orientar desenvolvedores que desejam manter ou expandir a aplicação. Para qualquer nova funcionalidade, siga a estrutura existente e utilize os hooks personalizados para gerenciar estados.
