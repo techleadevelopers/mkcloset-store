@@ -59,6 +59,7 @@ export default function Login() {
         <div className="flex justify-center">
           <Card className="w-full max-w-md shadow-2xl border-0">
             <CardHeader className="text-center space-y-2">
+              
               <CardTitle className="text-2xl font-bold bg-gradient-to-r from-gray-800 to-black bg-clip-text text-transparent">
                 Entrar na sua conta
               </CardTitle>

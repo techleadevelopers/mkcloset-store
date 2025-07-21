@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Truck, Shield, RotateCcw, ArrowRight } from 'lucide-react';
 import Header from '@/components/layout/header';
@@ -15,13 +14,20 @@ export default function Home() {
   const [featuredProducts, setFeaturedProducts] = useState<MockProduct[]>([]);
   const [categories, setCategories] = useState<MockCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  const images = [
+    "/images/tras.jpg",
+    "/images/lado.jpg",
+    "/images/frente.jpg", // Troque pelos caminhos corretos
+    "/images/glamour-frente.jpg"
+  ];
 
   useEffect(() => {
-    // Simular carregamento de dados
     const loadData = async () => {
       setIsLoading(true);
       await new Promise(resolve => setTimeout(resolve, 500)); // Simular delay de rede
-      
+
       const featured = getFilteredProducts({ featured: true });
       setFeaturedProducts(featured);
       setCategories(mockCategories);
@@ -29,6 +35,12 @@ export default function Home() {
     };
 
     loadData();
+
+    const interval = setInterval(() => {
+      setCurrentImageIndex((prevIndex) => (prevIndex + 1) % images.length);
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -36,19 +48,19 @@ export default function Home() {
       <Header />
       
       {/* Hero Section */}
-<section className="bg-gradient-to-br from-gray-50 to-gray-100 py-16 lg:py-24">
-  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-      <div className="space-y-6">
-        <h2 className="text-3xl sm:text-4xl lg:text-6xl font-bold text-gray-900 mb-4">
-          Nova Coleção
-          <span className="block text-gradient-black">
-            Primavera/Verão
-          </span>
-        </h2>
-        <p className="text-base sm:text-lg lg:text-xl text-gray-600 mb-6 leading-relaxed">
-          Descubra as últimas tendências em moda feminina. Peças exclusivas com design contemporâneo e qualidade premium.
-        </p>
+      <section className="bg-gradient-to-br from-gray-50 to-gray-100 py-16 lg:py-24">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <div className="space-y-6">
+              <h2 className="text-3xl sm:text-4xl lg:text-6xl font-bold text-gray-900 mb-4">
+                Nova Coleção
+                <span className="block text-gradient-black">
+                  Primavera/Verão
+                </span>
+              </h2>
+              <p className="text-base sm:text-lg lg:text-xl text-gray-600 mb-6 leading-relaxed">
+                Descubra as últimas tendências em moda feminina. Peças exclusivas com design contemporâneo e qualidade premium.
+              </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <Link href="/products">
                   <Button className="bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white px-8 py-3 rounded-xl">
@@ -63,11 +75,14 @@ export default function Home() {
               </div>
             </div>
             <div className="relative">
-              <img
-                src="/images/tras.jpg"
-                alt="Modelo usando vestido elegante da nova coleção"
-                className="rounded-2xl shadow-2xl w-full h-auto"
-              />
+              {/* Carrossel de Imagens */}
+              <div className="overflow-hidden rounded-2xl shadow-2xl">
+                <img
+                  src={images[currentImageIndex]}
+                  alt="Modelo usando vestido elegante da nova coleção"
+                  className="w-full h-[810px] object-cover rounded-2xl mb-0 transition-opacity duration-500" // Adicionado h-[500px]
+                />
+              </div>
               <div className="absolute -bottom-6 -left-6 bg-white rounded-xl p-4 shadow-xl">
                 <div className="flex items-center space-x-2">
                   <div className="w-3 h-3 bg-green-500 rounded-full"></div>

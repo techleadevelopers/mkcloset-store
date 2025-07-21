@@ -37,8 +37,8 @@ export const mockCategories: MockCategory[] = [
   },
   {
     id: 2,
-    name: "Blusas",
-    slug: "blusas",
+    name: "Top",
+    slug: "Top",
     description: "Blusas femininas modernas e confortáveis",
     imageUrl: "/images/frente.jpg",
     productCount: 22
@@ -66,14 +66,6 @@ export const mockCategories: MockCategory[] = [
     description: "Casacos e jaquetas para o inverno",
     imageUrl: "/images/frente.jpg",
     productCount: 8
-  },
-  { // Nova Categoria
-    id: 6,
-    name: "Conjuntos",
-    slug: "conjuntos",
-    description: "Conjuntos completos para um look perfeito",
-    imageUrl: "/images/frente.jpg", // Imagem representativa
-    productCount: 0 // Será atualizado dinamicamente ou manualmente
   }
 ];
 
@@ -91,7 +83,7 @@ export const mockProducts: MockProduct[] = [
     "/images/tras.jpg"    // Imagem traseira
   ],
     // imageUrl: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=400&h=600&fit=crop", //
-    category: "Vestidos",
+    category: "Conjuntos",
     categoryId: 1,
     sizes: [ "M"],
     colors: ["Vinho"],
@@ -258,44 +250,29 @@ export const mockProducts: MockProduct[] = [
     isFeatured: false,
     stock: 14
   },
-  { // Novo produto: Conjunto Júlia Bordo
+  {
     id: 13,
-    name: "Conjunto Júlia Bordo",
-    description: "Conjunto de top e saia com shorts estilo cargo em malha de alta qualidade. Cor bordo elegante, com bolsos funcionais e cintinho que valoriza a silhueta. Peças também vendidas separadamente: Top R$ 145,00, Saia com shorts R$ 360,00.",
-    price: 505.00, // 145 + 360
-    imageUrl: "/images/frente.jpg", // Caminho local
-    category: "Conjuntos",
-    categoryId: 6, // ID da nova categoria "Conjuntos"
-    sizes: ["M"],
-    colors: ["Bordo"],
-    isNew: true,
-    isFeatured: true,
-    stock: 10,
+    name: "Conjunto Glamour",
+    description: "top e saia com shorts no melhor estilo cargo! A cor bordo traz um toque de elegância, perfeita para qualquer ocasião!Com bolsos funcionais e um cintinho que valoriza a silhueta, esse look é ideal para quem busca praticidade sem abrir mão do estilo.",
+    price: 405.59,
+    originalPrice: 449.90,
+    imageUrl: "/images/glamour-lado.jpg",  // Caminho local
     images: [
-      "/images/products/conjunto-julia-bordo-frente.jpg",
-      "/images/products/conjunto-julia-bordo-lado.jpg",
-      "/images/products/conjunto-julia-bordo-costas.jpg",
-    ]
-  },
-  { // Novo produto: Conjunto Glamour Aplicações Premium
-    id: 14,
-    name: "Conjunto Glamour Aplicações Premium",
-    description: "Brilhe intensamente com este cropped e shorts com toque de glamour e aplicações premium. Perfeito para um estilo moderno e autêntico. Peças também vendidas separadamente: Top R$ 250,00, Shorts R$ 275,00.",
-    price: 525.00, // 250 + 275
-    imageUrl: "/images/frente.jpg", // Caminho local
+    "/images/frente.jpg", // Imagem frontal
+    "/images/lado.jpg",   // Imagem lateral
+    "/images/tras.jpg"    // Imagem traseira
+  ],
+    // imageUrl: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=400&h=600&fit=crop", //
     category: "Conjuntos",
-    categoryId: 6, // ID da nova categoria "Conjuntos"
-    sizes: ["M"],
-    colors: ["Preto/Prata"],
+    categoryId: 1,
+    sizes: [ "M"],
+    colors: ["Vinho"],
     isNew: true,
     isFeatured: true,
-    stock: 8,
-    images: [ // Caminhos locais das imagens adicionais
-      "/images/products/conjunto-glamour-preto-frente.jpg",
-      "/images/products/conjunto-glamour-preto-lado.jpg",
-      "/images/products/conjunto-glamour-preto-sentada.jpg",
-    ]
+    discount: 24,
+    stock: 15
   },
+
 ];
 
 // Função para filtrar produtos
