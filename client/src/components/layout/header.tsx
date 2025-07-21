@@ -34,14 +34,16 @@ export default function Header() {
 
   return (
     <header className="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 lg:px-8">
+        <div className="flex justify-between items-center h-20"> {/* Ajuste na altura do header */}
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/">
-              <h1 className="text-2xl font-bold text-gradient-black cursor-pointer">
-                MKcloset
-              </h1>
+              <img
+                src="/images/logo.jpg"
+                className="h-[120px] w-[120px] mr-10 object-contain" // Definindo altura e largura
+                alt="Logo"
+              />
             </Link>
           </div>
 

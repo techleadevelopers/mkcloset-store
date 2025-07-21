@@ -14,6 +14,7 @@ export interface MockProduct {
   isFeatured: boolean;
   discount?: number;
   stock: number;
+  images?: string[]; // <--- ADICIONADO AQUI
 }
 
 export interface MockCategory {
@@ -31,7 +32,7 @@ export const mockCategories: MockCategory[] = [
     name: "Vestidos",
     slug: "vestidos",
     description: "Vestidos elegantes para todas as ocasiões",
-    imageUrl: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=400&h=500&fit=crop",
+    imageUrl: "/images/frente.jpg",
     productCount: 15
   },
   {
@@ -39,7 +40,7 @@ export const mockCategories: MockCategory[] = [
     name: "Blusas",
     slug: "blusas",
     description: "Blusas femininas modernas e confortáveis",
-    imageUrl: "https://images.unsplash.com/photo-1571945153237-4929e783af4a?w=400&h=500&fit=crop",
+    imageUrl: "/images/frente.jpg",
     productCount: 22
   },
   {
@@ -47,7 +48,7 @@ export const mockCategories: MockCategory[] = [
     name: "Calças",
     slug: "calcas",
     description: "Calças femininas de alta qualidade",
-    imageUrl: "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=400&h=500&fit=crop",
+    imageUrl: "/images/frente.jpg",
     productCount: 18
   },
   {
@@ -55,7 +56,7 @@ export const mockCategories: MockCategory[] = [
     name: "Saias",
     slug: "saias",
     description: "Saias elegantes e versáteis",
-    imageUrl: "https://images.unsplash.com/photo-1583496661160-fb5886a13d1e?w=400&h=500&fit=crop",
+    imageUrl: "/images/frente.jpg",
     productCount: 12
   },
   {
@@ -63,23 +64,37 @@ export const mockCategories: MockCategory[] = [
     name: "Casacos",
     slug: "casacos",
     description: "Casacos e jaquetas para o inverno",
-    imageUrl: "https://images.unsplash.com/photo-1544441893-675973e31985?w=400&h=500&fit=crop",
+    imageUrl: "/images/frente.jpg",
     productCount: 8
+  },
+  { // Nova Categoria
+    id: 6,
+    name: "Conjuntos",
+    slug: "conjuntos",
+    description: "Conjuntos completos para um look perfeito",
+    imageUrl: "/images/frente.jpg", // Imagem representativa
+    productCount: 0 // Será atualizado dinamicamente ou manualmente
   }
 ];
 
 export const mockProducts: MockProduct[] = [
   {
     id: 1,
-    name: "Vestido Midi Floral Primavera",
-    description: "Elegante vestido midi com estampa floral delicada, perfeito para ocasiões especiais e uso diário.",
-    price: 189.90,
-    originalPrice: 249.90,
-    imageUrl: "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?w=400&h=600&fit=crop",
+    name: "Conjunto Júlia",
+    description: "top e saia com shorts no melhor estilo cargo! A cor bordo traz um toque de elegância, perfeita para qualquer ocasião!Com bolsos funcionais e um cintinho que valoriza a silhueta, esse look é ideal para quem busca praticidade sem abrir mão do estilo.",
+    price: 405.59,
+    originalPrice: 449.90,
+    imageUrl: "/images/frente.jpg",  // Caminho local
+    images: [
+    "/images/frente.jpg", // Imagem frontal
+    "/images/lado.jpg",   // Imagem lateral
+    "/images/tras.jpg"    // Imagem traseira
+  ],
+    // imageUrl: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=400&h=600&fit=crop", //
     category: "Vestidos",
     categoryId: 1,
-    sizes: ["P", "M", "G", "GG"],
-    colors: ["Rosa", "Azul", "Verde"],
+    sizes: [ "M"],
+    colors: ["Vinho"],
     isNew: true,
     isFeatured: true,
     discount: 24,
@@ -90,7 +105,7 @@ export const mockProducts: MockProduct[] = [
     name: "Blusa Básica Algodão",
     description: "Blusa básica em algodão 100%, confortável e versátil para o dia a dia.",
     price: 79.90,
-    imageUrl: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=600&fit=crop",
+    imageUrl: "/images/frente.jpg",
     category: "Blusas",
     categoryId: 2,
     sizes: ["PP", "P", "M", "G"],
@@ -105,7 +120,7 @@ export const mockProducts: MockProduct[] = [
     description: "Calça jeans skinny de corte premium, modelagem que valoriza o corpo feminino.",
     price: 159.90,
     originalPrice: 199.90,
-    imageUrl: "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=400&h=600&fit=crop",
+    imageUrl: "/images/frente.jpg",
     category: "Calças",
     categoryId: 3,
     sizes: ["36", "38", "40", "42", "44"],
@@ -120,7 +135,7 @@ export const mockProducts: MockProduct[] = [
     name: "Saia Plissada Midi",
     description: "Saia plissada midi elegante, ideal para looks femininos e sofisticados.",
     price: 129.90,
-    imageUrl: "https://images.unsplash.com/photo-1583496661160-fb5886a13d1e?w=400&h=600&fit=crop",
+    imageUrl: "/images/frente.jpg",
     category: "Saias",
     categoryId: 4,
     sizes: ["P", "M", "G"],
@@ -134,7 +149,7 @@ export const mockProducts: MockProduct[] = [
     name: "Blazer Estruturado Feminino",
     description: "Blazer estruturado de alfaiataria, perfeito para looks profissionais e elegantes.",
     price: 299.90,
-    imageUrl: "https://images.unsplash.com/photo-1544441893-675973e31985?w=400&h=600&fit=crop",
+    imageUrl: "/images/frente.jpg",
     category: "Casacos",
     categoryId: 5,
     sizes: ["P", "M", "G", "GG"],
@@ -149,7 +164,7 @@ export const mockProducts: MockProduct[] = [
     description: "Vestido longo para festas e eventos especiais, tecido fluido e modelagem elegante.",
     price: 349.90,
     originalPrice: 459.90,
-    imageUrl: "https://images.unsplash.com/photo-1566479179817-c1b17b443810?w=400&h=600&fit=crop",
+    imageUrl: "/images/tras.jpg",
     category: "Vestidos",
     categoryId: 1,
     sizes: ["P", "M", "G"],
@@ -164,7 +179,7 @@ export const mockProducts: MockProduct[] = [
     name: "Blusa Manga Longa Tricot",
     description: "Blusa de tricot manga longa, macia e quentinha para os dias mais frios.",
     price: 119.90,
-    imageUrl: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400&h=600&fit=crop",
+    imageUrl: "/images/tras.jpg",
     category: "Blusas",
     categoryId: 2,
     sizes: ["P", "M", "G", "GG"],
@@ -189,10 +204,10 @@ export const mockProducts: MockProduct[] = [
   },
   {
     id: 9,
-    name: "Vestido Curto Casual",
+    name: "Top Julia",
     description: "Vestido curto casual para o dia a dia, tecido leve e estampa moderna.",
     price: 139.90,
-    imageUrl: "https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=400&h=600&fit=crop",
+    imageUrl: "/images/lado.jpg",
     category: "Vestidos",
     categoryId: 1,
     sizes: ["PP", "P", "M", "G"],
@@ -206,7 +221,7 @@ export const mockProducts: MockProduct[] = [
     name: "Jaqueta Jeans Oversized",
     description: "Jaqueta jeans oversized, versátil e moderna para compor diversos looks.",
     price: 179.90,
-    imageUrl: "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=400&h=600&fit=crop",
+    imageUrl: "/images/tras.jpg",
     category: "Casacos",
     categoryId: 5,
     sizes: ["P", "M", "G"],
@@ -220,7 +235,7 @@ export const mockProducts: MockProduct[] = [
     name: "Blusa Cetim Decote V",
     description: "Blusa em cetim com decote V, elegante e sofisticada para ocasiões especiais.",
     price: 149.90,
-    imageUrl: "https://images.unsplash.com/photo-1573270566620-ed8649b4cdf8?w=400&h=600&fit=crop",
+    imageUrl: "/images/tras.jpg",
     category: "Blusas",
     categoryId: 2,
     sizes: ["P", "M", "G"],
@@ -234,7 +249,7 @@ export const mockProducts: MockProduct[] = [
     name: "Saia Lápis Cintura Alta",
     description: "Saia lápis de cintura alta, modelagem que valoriza a silhueta feminina.",
     price: 109.90,
-    imageUrl: "https://images.unsplash.com/photo-1560769629-975ec94e6a86?w=400&h=600&fit=crop",
+    imageUrl: "/images/tras.jpg",
     category: "Saias",
     categoryId: 4,
     sizes: ["36", "38", "40", "42"],
@@ -242,7 +257,45 @@ export const mockProducts: MockProduct[] = [
     isNew: false,
     isFeatured: false,
     stock: 14
-  }
+  },
+  { // Novo produto: Conjunto Júlia Bordo
+    id: 13,
+    name: "Conjunto Júlia Bordo",
+    description: "Conjunto de top e saia com shorts estilo cargo em malha de alta qualidade. Cor bordo elegante, com bolsos funcionais e cintinho que valoriza a silhueta. Peças também vendidas separadamente: Top R$ 145,00, Saia com shorts R$ 360,00.",
+    price: 505.00, // 145 + 360
+    imageUrl: "/images/frente.jpg", // Caminho local
+    category: "Conjuntos",
+    categoryId: 6, // ID da nova categoria "Conjuntos"
+    sizes: ["M"],
+    colors: ["Bordo"],
+    isNew: true,
+    isFeatured: true,
+    stock: 10,
+    images: [
+      "/images/products/conjunto-julia-bordo-frente.jpg",
+      "/images/products/conjunto-julia-bordo-lado.jpg",
+      "/images/products/conjunto-julia-bordo-costas.jpg",
+    ]
+  },
+  { // Novo produto: Conjunto Glamour Aplicações Premium
+    id: 14,
+    name: "Conjunto Glamour Aplicações Premium",
+    description: "Brilhe intensamente com este cropped e shorts com toque de glamour e aplicações premium. Perfeito para um estilo moderno e autêntico. Peças também vendidas separadamente: Top R$ 250,00, Shorts R$ 275,00.",
+    price: 525.00, // 250 + 275
+    imageUrl: "/images/frente.jpg", // Caminho local
+    category: "Conjuntos",
+    categoryId: 6, // ID da nova categoria "Conjuntos"
+    sizes: ["M"],
+    colors: ["Preto/Prata"],
+    isNew: true,
+    isFeatured: true,
+    stock: 8,
+    images: [ // Caminhos locais das imagens adicionais
+      "/images/products/conjunto-glamour-preto-frente.jpg",
+      "/images/products/conjunto-glamour-preto-lado.jpg",
+      "/images/products/conjunto-glamour-preto-sentada.jpg",
+    ]
+  },
 ];
 
 // Função para filtrar produtos

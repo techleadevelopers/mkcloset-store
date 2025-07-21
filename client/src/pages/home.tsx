@@ -36,19 +36,19 @@ export default function Home() {
       <Header />
       
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-gray-50 to-gray-100 py-16 lg:py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <div className="space-y-6">
-              <h2 className="text-4xl lg:text-6xl font-bold text-gray-900 mb-6">
-                Nova Coleção
-                <span className="block text-gradient-black">
-                  Primavera/Verão
-                </span>
-              </h2>
-              <p className="text-xl text-gray-600 mb-8 leading-relaxed">
-                Descubra as últimas tendências em moda feminina. Peças exclusivas com design contemporâneo e qualidade premium.
-              </p>
+<section className="bg-gradient-to-br from-gray-50 to-gray-100 py-16 lg:py-24">
+  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+      <div className="space-y-6">
+        <h2 className="text-3xl sm:text-4xl lg:text-6xl font-bold text-gray-900 mb-4">
+          Nova Coleção
+          <span className="block text-gradient-black">
+            Primavera/Verão
+          </span>
+        </h2>
+        <p className="text-base sm:text-lg lg:text-xl text-gray-600 mb-6 leading-relaxed">
+          Descubra as últimas tendências em moda feminina. Peças exclusivas com design contemporâneo e qualidade premium.
+        </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <Link href="/products">
                   <Button className="bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white px-8 py-3 rounded-xl">
@@ -64,7 +64,7 @@ export default function Home() {
             </div>
             <div className="relative">
               <img
-                src="https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=800&h=1000&fit=crop"
+                src="/images/tras.jpg"
                 alt="Modelo usando vestido elegante da nova coleção"
                 className="rounded-2xl shadow-2xl w-full h-auto"
               />
@@ -107,7 +107,7 @@ export default function Home() {
                   <div className="group cursor-pointer bg-white rounded-2xl shadow-sm hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 border-0 overflow-hidden">
                     <div className="p-6">
                       <img
-                        src={category.imageUrl || 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=400'}
+                        src={category.imageUrl || '/images/tras.jpg'}
                         alt={`Coleção ${category.name}`}
                         className="w-full h-64 object-cover rounded-xl mb-4 transition-transform duration-300 group-hover:scale-105"
                       />

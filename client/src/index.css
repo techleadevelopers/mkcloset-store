@@ -131,8 +131,77 @@
   }
   
   /* Mobile hero adjustments */
-  .hero-mobile {
-    @apply text-3xl px-4;
+    .hero-mobile {
+    @apply text-2xl px-4; /* Ajuste o tamanho do texto */
+  }
+  
+  /* Ajustes nos botões */
+  .btn-primary {
+    @apply py-1 px-1; /* Ajuste o padding para botões menores */
+  }
+
+  /* Ajustes no texto */
+  h1 {
+    @apply text-2xl; /* Tamanho da fonte para h1 em mobile */
+  }
+
+  p {
+    @apply text-sm; /* Tamanho da fonte para parágrafo em mobile */
+  }
+  /* styles.css */
+
+footer {
+  padding: 2rem 0;
+}
+
+footer h3, footer h4 {
+  text-align: center;
+}
+
+footer p {
+  text-align: center;
+}
+
+footer ul {
+  padding: 0;
+  list-style: none;
+  text-align: center;
+}
+
+
+
+@media (max-width: 768px) {
+  footer {
+    padding: 1rem 0;
+  }
+
+  footer h3 {
+    font-size: 1.5rem; /* Ajuste para mobile */
+  }
+
+  footer h4 {
+    font-size: 1rem; /* Ajuste para mobile */
+  }
+
+  footer p {
+    font-size: 0.875rem; /* Ajuste para mobile */
+  }
+
+  footer ul li {
+    margin-bottom: 0.5rem; /* Espaçamento entre itens */
+  }
+}
+  .promo-banner h3 {
+    font-size: 2rem; /* Tamanho do título em mobile */
+  }
+  
+  .promo-banner p {
+    font-size: 1rem; /* Tamanho do texto em mobile */
+  }
+
+  .promo-banner .flex {
+    flex-direction: column; /* Muda para coluna em mobile */
+    align-items: center; /* Alinha ao centro */
   }
 }
 
