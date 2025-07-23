@@ -18,10 +18,10 @@ export default function Header() {
 
   const navigation = [
     { name: 'Novidades', href: '/products?featured=true' },
+    { name: 'Conjuntos', href: '/products/conjuntos' },
     { name: 'Vestidos', href: '/products/vestidos' },
-    { name: 'Blusas', href: '/products/casual' },
-    { name: 'Calças', href: '/products/casual' },
-    { name: 'Acessórios', href: '/products/acessorios' },
+    { name: 'Saias', href: '/products/saias' },
+    { name: 'Top', href: '/products/tops' },
   ];
 
   const handleSearch = (e: React.FormEvent) => {

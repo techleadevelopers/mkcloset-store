@@ -1,5 +1,9 @@
+// src/components/ui/whatsapp-button.tsx
+
 import { useState, useEffect } from 'react';
-import { MessageCircle, Phone } from 'lucide-react';
+// Não precisamos de MessageCircle ou Phone se não forem usados em outras partes.
+// Se não usar em mais nenhum lugar, pode remover essas importações.
+import { MessageCircle, Phone } from 'lucide-react'; 
 
 interface WhatsAppButtonProps {
   phoneNumber?: string;
@@ -17,10 +21,7 @@ export default function WhatsAppButton({
   const [isPulsing, setIsPulsing] = useState(true);
 
   useEffect(() => {
-    // Mostrar o botão após um pequeno delay
     const timer = setTimeout(() => setIsVisible(true), 2000);
-    
-    // Parar o pulso após alguns segundos
     const pulseTimer = setTimeout(() => setIsPulsing(false), 10000);
     
     return () => {
@@ -67,10 +68,12 @@ export default function WhatsAppButton({
           `}
           aria-label="Contato via WhatsApp"
         >
-          {/* Button Content */}
-          <div className="relative flex items-center justify-center w-full h-full">
-            <MessageCircle 
-              className={`w-7 h-7 transition-all duration-300 ${isHovered ? 'scale-110 rotate-12' : 'scale-100 rotate-0'}`} 
+          {/* Button Content - AGORA COM A IMAGEM /images/frente.jpg */}
+          <div className="relative flex items-center justify-center w-16 h-16 overflow-hidden rounded-full"> {/* Adicionado overflow-hidden e rounded-full aqui */}
+            <img 
+              src="/images/whatssap.png" // <-- MUDANÇA: O caminho da sua imagem real
+              alt="Imagem do Produto"
+              className="w-full h-full object-cover" // <-- MUDANÇA: w-full h-full e object-cover para preencher o círculo
             />
             
             {/* Sparkle Effects */}
@@ -105,7 +108,7 @@ export default function WhatsAppButton({
         ${isVisible && isPulsing ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
         sm:hidden
       `}>
-        <div className="bg-white rounded-xl shadow-2xl border border-gray-100 p-4 relative">
+        <div className="bg-white rounded-xl shadow-2xl familiarize border border-gray-100 p-4 relative">
           {/* Close Button */}
           <button 
             onClick={() => setIsVisible(false)}
@@ -115,8 +118,12 @@ export default function WhatsAppButton({
           </button>
           
           <div className="flex items-start space-x-3">
-            <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-              <MessageCircle className="w-5 h-5 text-white" />
+            <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden"> {/* Adicionado overflow-hidden aqui */}
+              <img 
+                src="/images/whatssap.png" // <-- MUDANÇA: O caminho da sua imagem real para o bubble
+                alt="Imagem do Produto"
+                className="w-full h-full object-cover" // <-- MUDANÇA: w-full h-full e object-cover
+              />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-900 mb-1">MKcloset</p>
@@ -133,8 +140,6 @@ export default function WhatsAppButton({
           </div>
         </div>
       </div>
-
-
     </>
   );
 }

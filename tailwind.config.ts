@@ -5,6 +5,14 @@ export default {
   content: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        abel: ['Abel', 'sans-serif'],
+        'chakra-petch': ['"Chakra Petch"', 'sans-serif'], // Adicionada Chakra Petch
+        gruppo: ['Gruppo', 'sans-serif'],                   // Adicionada Gruppo
+        'luxurious-script': ['"Luxurious Script"', 'cursive'],
+        'monsieur-la-doulaise': ['"Monsieur La Doulaise"', 'cursive'],
+        poppins: ['Poppins', 'sans-serif'], // Mantida Poppins caso queira usar
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
