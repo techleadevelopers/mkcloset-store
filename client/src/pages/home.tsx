@@ -9,6 +9,7 @@ import ProductCard from '@/components/product/product-card';
 import ShoppingCart from '@/components/cart/shopping-cart';
 import WhatsAppButton from '@/components/ui/whatsapp-button';
 import { mockProducts, mockCategories, getFilteredProducts, type MockProduct, type MockCategory } from '@/lib/mock-data';
+import InstagramFeedSection from '@/components/InstagramFeedSection'; // Importa a nova seção do Instagram
 
 export default function Home() {
   const [featuredProducts, setFeaturedProducts] = useState<MockProduct[]>([]);
@@ -247,6 +248,10 @@ export default function Home() {
 
       <ShoppingCart />
       <WhatsAppButton />
+
+      {/* A Nova Seção do Instagram integrada aqui */}
+      <InstagramFeedSection /> 
+
       <Footer />
     </div>
   );
