@@ -1,3 +1,5 @@
+// src/pages/home.tsx (ou o caminho exato do seu Home.tsx)
+
 import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -17,11 +19,21 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
+  // Array de imagens atualizado para o carrossel da Hero Section
   const images = [
-    "/images/tras.jpg",
-    "/images/lado.jpg",
-    "/images/frente.jpg", // Troque pelos caminhos corretos
-    "/images/glamour-frente.jpg"
+    "/images/frente.jpg", // Conjunto Julia - frente
+    "/images/tras.jpg",   // Conjunto Julia - trás (também para Vestidos)
+    "/images/lado.jpg",   // Conjunto Julia - lado
+    "/images/glamour.jpg", // Conjunto Glamour
+    "/images/glamour-frente.jpg", // Conjunto Glamour - frente
+    "/images/glamour-lado.jpg", // Conjunto Glamour - lado
+    "/images/olivia-frente.jpg", // Conjunto Olivia - frente
+    "/images/olivia-lado.jpg",    // Conjunto Olivia - lado
+    "/images/olivia-tras.jpg",    // Conjunto Olivia - trás
+    "/images/top-julia.jpg",      // Top Julia
+    "/images/top-glamour.jpg",    // Top Glamour
+    "/images/saia-julia.jpg",     // Saia Julia
+    "/images/saia-glamour.jpg",   // Saia Glamour
   ];
 
   useEffect(() => {
@@ -31,7 +43,38 @@ export default function Home() {
 
       const featured = getFilteredProducts({ featured: true });
       setFeaturedProducts(featured);
-      setCategories(mockCategories);
+
+      // Lógica para alinhar as imagens das categorias
+      // Mantenha essa lógica se você quer imagens específicas para algumas categorias
+      // caso contrário, remova este bloco e deixe o imageUrl padrão do mockCategories.
+      const updatedCategories = mockCategories.map(category => {
+        let newImageUrl = category.imageUrl; // Mantém a imagem existente como padrão
+
+        switch (category.name) {
+          case 'Vestido': // Certifique-se que o nome da categoria corresponde ao mockCategories
+            newImageUrl = '/images/tras.jpg'; 
+            break;
+          case 'Blusas': // Antes era 'Top', ajuste para 'Blusas'
+            newImageUrl = '/images/top-julia.jpg'; 
+            break;
+          case 'Saia': // Antes era 'Saias', ajuste para 'Saia'
+            newImageUrl = '/images/saia-julia.jpg'; 
+            break;
+          case 'Calças':
+            newImageUrl = '/images/olivia-frente.jpg'; 
+            break;
+          case 'Jaqueta': // Antes era 'Casacos', ajuste para 'Jaqueta'
+            newImageUrl = '/images/glamour-lado.jpg';
+            break;
+          // Se houver outras categorias, adicione mais cases aqui
+          default:
+            // Se a categoria não for mapeada acima, mantém a imagem original do mock-data
+            break;
+        }
+        return { ...category, imageUrl: newImageUrl };
+      });
+
+      setCategories(updatedCategories); // Define as categorias com as imagens atualizadas
       setIsLoading(false);
     };
 
@@ -42,7 +85,7 @@ export default function Home() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [images.length]); // Adicionado images.length como dependência para o useEffect
 
   return (
     <div className="min-h-screen bg-white">
@@ -96,54 +139,87 @@ export default function Home() {
       </section>
 
       {/* Categories Section */}
-      <section className="py-16 bg-white">
+      <section className="py-20 bg-gradient-to-br from-gray-50 to-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h3 className="text-3xl font-bold text-gray-900 mb-4">Compre por Categoria</h3>
-            <p className="text-gray-600 max-w-2xl mx-auto">
+          <div className="text-center mb-16">
+            <h3 className="text-4xl font-bold text-gray-900 mb-6">Compre por Categoria</h3>
+            <p className="text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed">
               Encontre o que você procura em nossas categorias cuidadosamente organizadas
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6 lg:gap-8">
             {isLoading ? (
-              [...Array(3)].map((_, i) => (
-                <div key={i} className="bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300">
-                  <div className="p-6">
-                    <Skeleton className="w-full h-64 rounded-xl mb-4" />
-                    <Skeleton className="h-6 w-3/4 mb-2" />
-                    <Skeleton className="h-4 w-full mb-4" />
-                    <Skeleton className="h-4 w-1/2" />
+              // Esqueletos de carregamento permanecem os mesmos
+              [...Array(9)].map((_, i) => (
+                <div key={i} className="group">
+                  <div className="relative overflow-hidden rounded-2xl bg-white shadow-sm hover:shadow-xl transition-all duration-300">
+                    <Skeleton className="w-full aspect-[3/4]" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+                      <Skeleton className="h-5 w-3/4 mb-2 bg-white/30" />
+                      <Skeleton className="h-4 w-1/2 bg-white/20" /> {/* Simula o espaço da contagem de produtos */}
+                    </div>
                   </div>
                 </div>
               ))
             ) : (
-              categories.slice(0, 3).map((category) => (
+              categories.map((category) => (
                 <Link key={category.id} href={`/products/${category.slug}`}>
-                  <div className="group cursor-pointer bg-white rounded-2xl shadow-sm hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 border-0 overflow-hidden">
-                    <div className="p-6">
-                      <img
-                        src={category.imageUrl || '/images/tras.jpg'}
-                        alt={`Coleção ${category.name}`}
-                        className="w-full h-64 object-cover rounded-xl mb-4 transition-transform duration-300 group-hover:scale-105"
-                      />
-                      <h4 className="text-xl font-semibold text-gray-900 mb-2">{category.name}</h4>
-                      <p className="text-gray-600 mb-4">{category.description}</p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-700 font-semibold group-hover:text-gray-900 transition-colors">
-                          Ver Coleção
-                        </span>
-                        <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-gray-700 transition-all group-hover:translate-x-1" />
+                  <div className="group cursor-pointer">
+                    <div className="relative overflow-hidden rounded-2xl bg-white shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-2">
+                      <div className="aspect-[3/4] overflow-hidden">
+                        <img
+                          src={category.imageUrl}
+                          alt={`Coleção ${category.name}`}
+                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                          loading="lazy"
+                        />
                       </div>
+                      
+                      {/* Gradient Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-80 group-hover:opacity-90 transition-opacity duration-300" />
+                      
+                      {/* Content */}
+                      <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+                        <h4 className="text-xl font-bold mb-0.5 transform transition-transform duration-300 group-hover:translate-y-[-2px]"> {/* Ajustado para text-xl e mb-0.5 para mais impacto */}
+                          {category.name}
+                        </h4>
+                        {/* REMOVIDO: A tag <p> com a descrição da categoria */}
+                        <div className="flex items-center justify-between mt-1"> {/* Ajustado mt-1 */}
+                          <span className="text-sm font-medium text-gray-300 opacity-80"> {/* Ajustado para opacity-80 */}
+                            {category.productCount} produtos
+                          </span>
+                          <ArrowRight className="h-4 w-4 text-white opacity-70 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1" />
+                        </div>
+                      </div>
+                      
+                      {/* Hover Effect Border */}
+                      <div className="absolute inset-0 rounded-2xl ring-0 group-hover:ring-2 group-hover:ring-gray-900/20 transition-all duration-300" />
                     </div>
                   </div>
                 </Link>
               ))
             )}
           </div>
+
+          {/* Ver Todas as Categorias Button */}
+          <div className="text-center mt-12">
+            <Link href="/products">
+              <Button
+                variant="outline"
+                size="lg"
+                className="bg-white hover:bg-gray-50 border-2 border-gray-900 text-gray-900 hover:text-black font-semibold px-8 py-3 rounded-xl transition-all duration-300 hover:shadow-lg"
+              >
+                Ver Todas as Categorias
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
+          </div>
         </div>
       </section>
 
+      {/* Restante do Home.tsx permanece o mesmo */}
       {/* Featured Products */}
       <section className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

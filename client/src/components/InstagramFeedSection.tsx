@@ -31,10 +31,7 @@ export default function InstagramFeedSection() {
       <div className="max-w-7xl mx-auto text-center">
         {/* Este é o container onde o EmbedSocial vai renderizar o feed. */}
         {/* O JavaScript dentro do useEffect irá anexar a div '.embedsocial-hashtag' aqui. */}
-        <div ref={embedContainerRef} className="embed-social-feed-wrapper">
-          {/* Opcional: Um texto simples de carregamento enquanto o widget carrega */}
-          <p className="text-center text-gray-500">Carregando feed do Instagram...</p>
-        </div>
+       
       </div>
     </section>
   );

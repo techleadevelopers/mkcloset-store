@@ -1,4 +1,5 @@
-// Mock data para produtos da MKcloset
+// src/data/products.ts (ou seu arquivo de dados)
+
 export interface MockProduct {
   id: number;
   name: string;
@@ -11,10 +12,10 @@ export interface MockProduct {
   sizes: string[];
   colors: string[];
   isNew: boolean;
-  isFeatured: boolean;
+  isFeatured: boolean; // Chave para a seção de destaque
   discount?: number;
   stock: number;
-  images?: string[]; // <--- ADICIONADO AQUI
+  images?: string[];
 }
 
 export interface MockCategory {
@@ -27,259 +28,146 @@ export interface MockCategory {
 }
 
 export const mockCategories: MockCategory[] = [
-  {
-    id: 1,
-    name: "Vestidos",
-    slug: "vestidos",
-    description: "Vestidos elegantes para todas as ocasiões",
-    imageUrl: "/images/frente.jpg",
-    productCount: 15
-  },
-  {
-    id: 2,
-    name: "Top",
-    slug: "Top",
-    description: "Blusas femininas modernas e confortáveis",
-    imageUrl: "/images/frente.jpg",
-    productCount: 22
-  },
-  {
-    id: 3,
-    name: "Calças",
-    slug: "calcas",
-    description: "Calças femininas de alta qualidade",
-    imageUrl: "/images/frente.jpg",
-    productCount: 18
-  },
-  {
-    id: 4,
-    name: "Saias",
-    slug: "saias",
-    description: "Saias elegantes e versáteis",
-    imageUrl: "/images/frente.jpg",
-    productCount: 12
-  },
-  {
-    id: 5,
-    name: "Casacos",
-    slug: "casacos",
-    description: "Casacos e jaquetas para o inverno",
-    imageUrl: "/images/frente.jpg",
-    productCount: 8
-  }
+  // Mantenha suas categorias, pois seus produtos reais as utilizam.
+  { id: 1, name: "Vestido", slug: "vestido", description: "Vestidos elegantes para todas as ocasiões", imageUrl: "/images/tras.jpg", productCount: 0 },
+  { id: 2, name: "Blusas", slug: "blusas", description: "Blusas femininas modernas e confortáveis", imageUrl: "/images/top-julia.jpg", productCount: 0 },
+  { id: 3, name: "Saia", slug: "saia", description: "Saias elegantes e versáteis", imageUrl: "/images/saia-julia.jpg", productCount: 0 },
+  { id: 4, name: "Conjuntos", slug: "conjuntos", description: "Conjuntos completos para qualquer estilo", imageUrl: "/images/frente.jpg", productCount: 0 },
+  { id: 5, name: "Jaqueta", slug: "jaqueta", description: "Jaquetas estilosas para complementar seu look", imageUrl: "/images/glamour-frente.jpg", productCount: 0 },
+  { id: 6, name: "Shorts saia", slug: "shorts-saia", description: "Shorts saia confortáveis e na moda", imageUrl: "/images/lado.jpg", productCount: 0 },
+  { id: 7, name: "Shorts", slug: "shorts", description: "Shorts versáteis para o dia a dia", imageUrl: "/images/olivia-lado.jpg", productCount: 0 },
+  { id: 8, name: "Camisetas", slug: "camisetas", description: "Camisetas básicas e estampadas", imageUrl: "/images/top-glamour.jpg", productCount: 0 },
+  { id: 9, name: "Body", slug: "body", description: "Bodies elegantes e sensuais", imageUrl: "/images/glamour.jpg", productCount: 0 },
+  { id: 10, name: "Calças", slug: "calcas", description: "Calças femininas de alta qualidade e estilo", imageUrl: "/images/olivia-frente.jpg", productCount: 0 }
 ];
 
+// mockProducts: AGORA CONTÉM APENAS OS SEUS 8 PRODUTOS REAIS, REORDENADOS.
 export const mockProducts: MockProduct[] = [
+  // --- Conjunto Júlia e Peças ---
   {
     id: 1,
     name: "Conjunto Júlia",
-    description: "top e saia com shorts no melhor estilo cargo! A cor bordo traz um toque de elegância, perfeita para qualquer ocasião!Com bolsos funcionais e um cintinho que valoriza a silhueta, esse look é ideal para quem busca praticidade sem abrir mão do estilo.",
-    price: 405.59,
-    originalPrice: 449.90,
-    imageUrl: "/images/frente.jpg",  // Caminho local
-    images: [
-    "/images/frente.jpg", // Imagem frontal
-    "/images/lado.jpg",   // Imagem lateral
-    "/images/tras.jpg"    // Imagem traseira
-  ],
-    // imageUrl: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=400&h=600&fit=crop", //
+    description: "top e saia com shorts no melhor estilo cargo! Feito em malha de alta qualidade, ele é super confortável e estiloso. A cor bordo traz um toque de elegância, perfeita para qualquer ocasião! Com bolsos funcionais e um cintinho que valoriza a silhueta, esse look é ideal para quem busca praticidade sem abrir mão do estilo.",
+    price: 505.00,
+    imageUrl: "/images/frente.jpg", // AJUSTE ESTE E OS PRÓXIMOS CAMINHOS DE IMAGEM PARA OS SEUS CAMINHOS REAIS!
+    images: ["/images/frente.jpg", "/images/lado.jpg", "/images/tras.jpg"],
     category: "Conjuntos",
-    categoryId: 1,
-    sizes: [ "M"],
-    colors: ["Vinho"],
+    categoryId: 4,
+    sizes: ["M"],
+    colors: ["Bordo"],
     isNew: true,
-    isFeatured: true,
-    discount: 24,
+    isFeatured: true, // DEFINIDO COMO DESTAQUE
     stock: 15
   },
   {
     id: 2,
-    name: "Blusa Básica Algodão",
-    description: "Blusa básica em algodão 100%, confortável e versátil para o dia a dia.",
-    price: 79.90,
-    imageUrl: "/images/frente.jpg",
+    name: "Top Julia",
+    description: "Top do Conjunto Julia, vendido separadamente.",
+    price: 145.00,
+    imageUrl: "/images/top-julia.jpg",
     category: "Blusas",
     categoryId: 2,
-    sizes: ["PP", "P", "M", "G"],
-    colors: ["Branco", "Preto", "Cinza"],
+    sizes: ["M"],
+    colors: ["Bordo"],
     isNew: false,
-    isFeatured: true,
-    stock: 25
-  },
-  {
-    id: 3,
-    name: "Calça Jeans Skinny Premium",
-    description: "Calça jeans skinny de corte premium, modelagem que valoriza o corpo feminino.",
-    price: 159.90,
-    originalPrice: 199.90,
-    imageUrl: "/images/frente.jpg",
-    category: "Calças",
-    categoryId: 3,
-    sizes: ["36", "38", "40", "42", "44"],
-    colors: ["Azul Escuro", "Azul Claro", "Preto"],
-    isNew: false,
-    isFeatured: true,
-    discount: 20,
-    stock: 12
-  },
-  {
-    id: 4,
-    name: "Saia Plissada Midi",
-    description: "Saia plissada midi elegante, ideal para looks femininos e sofisticados.",
-    price: 129.90,
-    imageUrl: "/images/frente.jpg",
-    category: "Saias",
-    categoryId: 4,
-    sizes: ["P", "M", "G"],
-    colors: ["Preto", "Camel", "Vinho"],
-    isNew: true,
-    isFeatured: false,
-    stock: 8
-  },
-  {
-    id: 5,
-    name: "Blazer Estruturado Feminino",
-    description: "Blazer estruturado de alfaiataria, perfeito para looks profissionais e elegantes.",
-    price: 299.90,
-    imageUrl: "/images/frente.jpg",
-    category: "Casacos",
-    categoryId: 5,
-    sizes: ["P", "M", "G", "GG"],
-    colors: ["Preto", "Marinho", "Bege"],
-    isNew: false,
-    isFeatured: true,
-    stock: 6
-  },
-  {
-    id: 6,
-    name: "Vestido Longo Festa",
-    description: "Vestido longo para festas e eventos especiais, tecido fluido e modelagem elegante.",
-    price: 349.90,
-    originalPrice: 459.90,
-    imageUrl: "/images/tras.jpg",
-    category: "Vestidos",
-    categoryId: 1,
-    sizes: ["P", "M", "G"],
-    colors: ["Preto", "Vinho", "Azul Marinho"],
-    isNew: true,
-    isFeatured: true,
-    discount: 24,
-    stock: 4
-  },
-  {
-    id: 7,
-    name: "Blusa Manga Longa Tricot",
-    description: "Blusa de tricot manga longa, macia e quentinha para os dias mais frios.",
-    price: 119.90,
-    imageUrl: "/images/tras.jpg",
-    category: "Blusas",
-    categoryId: 2,
-    sizes: ["P", "M", "G", "GG"],
-    colors: ["Camel", "Off White", "Preto"],
-    isNew: false,
-    isFeatured: false,
-    stock: 18
-  },
-  {
-    id: 8,
-    name: "Calça Wide Leg Linho",
-    description: "Calça wide leg em linho, confortável e elegante para looks casuais.",
-    price: 189.90,
-    imageUrl: "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=400&h=600&fit=crop",
-    category: "Calças",
-    categoryId: 3,
-    sizes: ["36", "38", "40", "42"],
-    colors: ["Bege", "Branco", "Terracota"],
-    isNew: true,
-    isFeatured: false,
+    isFeatured: false, // Não é destaque
     stock: 10
   },
   {
-    id: 9,
-    name: "Top Julia",
-    description: "Vestido curto casual para o dia a dia, tecido leve e estampa moderna.",
-    price: 139.90,
-    imageUrl: "/images/lado.jpg",
-    category: "Vestidos",
-    categoryId: 1,
-    sizes: ["PP", "P", "M", "G"],
-    colors: ["Estampado Floral", "Estampado Geométrico"],
+    id: 3,
+    name: "Saia com shorts Julia",
+    description: "Saia com shorts no melhor estilo cargo, vendida separadamente do Conjunto Julia.",
+    price: 360.00,
+    imageUrl: "/images/saia-julia.jpg",
+    category: "Saia",
+    categoryId: 3,
+    sizes: ["M"],
+    colors: ["Bordo"],
     isNew: false,
-    isFeatured: true,
-    stock: 20
+    isFeatured: false, // Não é destaque
+    stock: 10
   },
+  // --- Conjunto Glamour e Peças ---
   {
-    id: 10,
-    name: "Jaqueta Jeans Oversized",
-    description: "Jaqueta jeans oversized, versátil e moderna para compor diversos looks.",
-    price: 179.90,
-    imageUrl: "/images/tras.jpg",
-    category: "Casacos",
-    categoryId: 5,
-    sizes: ["P", "M", "G"],
-    colors: ["Azul Médio", "Azul Escuro"],
-    isNew: true,
-    isFeatured: false,
-    stock: 7
-  },
-  {
-    id: 11,
-    name: "Blusa Cetim Decote V",
-    description: "Blusa em cetim com decote V, elegante e sofisticada para ocasiões especiais.",
-    price: 149.90,
-    imageUrl: "/images/tras.jpg",
-    category: "Blusas",
-    categoryId: 2,
-    sizes: ["P", "M", "G"],
-    colors: ["Dourado", "Prata", "Preto"],
-    isNew: false,
-    isFeatured: true,
-    stock: 9
-  },
-  {
-    id: 12,
-    name: "Saia Lápis Cintura Alta",
-    description: "Saia lápis de cintura alta, modelagem que valoriza a silhueta feminina.",
-    price: 109.90,
-    imageUrl: "/images/tras.jpg",
-    category: "Saias",
-    categoryId: 4,
-    sizes: ["36", "38", "40", "42"],
-    colors: ["Preto", "Marinho", "Cinza"],
-    isNew: false,
-    isFeatured: false,
-    stock: 14
-  },
-  {
-    id: 13,
-    name: "Conjunto Glamour",
-    description: "top e saia com shorts no melhor estilo cargo! A cor bordo traz um toque de elegância, perfeita para qualquer ocasião!Com bolsos funcionais e um cintinho que valoriza a silhueta, esse look é ideal para quem busca praticidade sem abrir mão do estilo.",
-    price: 405.59,
-    originalPrice: 449.90,
-    imageUrl: "/images/glamour-lado.jpg",  // Caminho local
-    images: [
-    "/images/frente.jpg", // Imagem frontal
-    "/images/lado.jpg",   // Imagem lateral
-    "/images/tras.jpg"    // Imagem traseira
-  ],
-    // imageUrl: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=400&h=600&fit=crop", //
+    id: 4,
+    name: "Conjunto glamour Aplicações premium",
+    description: "Brilhe intensamente com esse cropped e shorts com toque de glamour! Qualidade premium. Perfeito para quem ama um estilo moderno e autêntico.",
+    price: 525.00,
+    imageUrl: "/images/glamour-lado.jpg",
+    images: ["/images/glamour.jpg", "/images/glamour-frente.jpg", "/images/glamour-lado.jpg"],
     category: "Conjuntos",
-    categoryId: 1,
-    sizes: [ "M"],
-    colors: ["Vinho"],
+    categoryId: 4,
+    sizes: ["M"],
+    colors: ["Preto"],
     isNew: true,
-    isFeatured: true,
-    discount: 24,
+    isFeatured: true, // DEFINIDO COMO DESTAQUE
     stock: 15
   },
-
+  {
+    id: 5,
+    name: "Top Glamour",
+    description: "Cropped com aplicações premium, vendido separadamente do Conjunto Glamour.",
+    price: 250.00,
+    imageUrl: "/images/top-glamour.jpg",
+    category: "Blusas",
+    categoryId: 2,
+    sizes: ["M"],
+    colors: ["Preto"],
+    isNew: false,
+    isFeatured: false, // Não é destaque
+    stock: 10
+  },
+  {
+    id: 6,
+    name: "Shorts Glamour",
+    description: "Shorts com toque de glamour, vendido separadamente do Conjunto Glamour.",
+    price: 275.00,
+    imageUrl: "/images/shorts-glamour.jpg",
+    category: "Shorts",
+    categoryId: 7,
+    sizes: ["M"],
+    colors: ["Preto"],
+    isNew: false,
+    isFeatured: false, // Não é destaque
+    stock: 10
+  },
+  // --- Outros Produtos ---
+  {
+    id: 7,
+    name: "Conjunto colete e shorts saia Olivia",
+    description: "tencel 92% viscose 8% poliester colete com fechamento botões",
+    price: 270.00,
+    imageUrl: "/images/olivia-frente.jpg",
+    images: ["/images/olivia-frente.jpg", "/images/olivia-lado.jpg", "/images/olivia-tras.jpg"],
+    category: "Conjuntos",
+    categoryId: 4,
+    sizes: ["P"],
+    colors: ["Off White"],
+    isNew: true,
+    isFeatured: true, // DEFINIDO COMO DESTAQUE
+    stock: 10
+  },
+  {
+    id: 8,
+    name: "Vestido",
+    description: "Vestido elegante para diversas ocasiões.",
+    price: 200.00,
+    imageUrl: "/images/tras.jpg",
+    category: "Vestido",
+    categoryId: 1,
+    sizes: ["P", "M", "G"],
+    colors: ["Preto"],
+    isNew: false,
+    isFeatured: true, // DEFINIDO COMO DESTAQUE (para ter 4 produtos nos destaques)
+    stock: 5
+  },
 ];
 
-// Função para filtrar produtos
+// As funções de filtro e busca permanecem as mesmas
 export const getFilteredProducts = (filters: {
   category?: number;
   search?: string;
-  featured?: boolean;
+  featured?: boolean; // Usado para a seção de destaque
   isNew?: boolean;
 }) => {
   let filtered = [...mockProducts];
@@ -290,13 +178,14 @@ export const getFilteredProducts = (filters: {
 
   if (filters.search) {
     const searchLower = filters.search.toLowerCase();
-    filtered = filtered.filter(product => 
+    filtered = filtered.filter(product =>
       product.name.toLowerCase().includes(searchLower) ||
       product.description.toLowerCase().includes(searchLower) ||
       product.category.toLowerCase().includes(searchLower)
     );
   }
 
+  // Se 'featured' for true, filtra apenas os produtos marcados como destaque
   if (filters.featured) {
     filtered = filtered.filter(product => product.isFeatured);
   }
@@ -308,21 +197,19 @@ export const getFilteredProducts = (filters: {
   return filtered;
 };
 
-// Função para buscar produto por ID
 export const getProductById = (id: number): MockProduct | undefined => {
   return mockProducts.find(product => product.id === id);
 };
 
-// Função para buscar categoria por slug
 export const getCategoryBySlug = (slug: string): MockCategory | undefined => {
   return mockCategories.find(category => category.slug === slug);
 };
 
-// Função para buscar produtos relacionados
 export const getRelatedProducts = (productId: number, limit: number = 4): MockProduct[] => {
   const product = getProductById(productId);
   if (!product) return [];
 
+  // Filtra produtos relacionados pela mesma categoria, excluindo o produto atual
   return mockProducts
     .filter(p => p.id !== productId && p.categoryId === product.categoryId)
     .slice(0, limit);

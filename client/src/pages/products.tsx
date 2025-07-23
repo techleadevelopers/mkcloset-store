@@ -1,3 +1,5 @@
+// src/pages/products.tsx (ou o caminho exato do seu Products.tsx)
+
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Filter, Grid, List } from 'lucide-react';
@@ -9,11 +11,11 @@ import Footer from '@/components/layout/footer';
 import ProductCard from '@/components/product/product-card';
 import ShoppingCart from '@/components/cart/shopping-cart';
 import WhatsAppButton from '@/components/ui/whatsapp-button';
-import { mockProducts, mockCategories, getFilteredProducts, getCategoryBySlug, type MockProduct, type MockCategory } from '@/lib/mock-data';
+import { mockProducts, mockCategories, getFilteredProducts, getCategoryBySlug, type MockProduct, type MockCategory } from '@/lib/mock-data'; // Usando '@/lib/mock-data' conforme seu import
 
 export default function Products() {
   const [location] = useLocation();
-  const [sortBy, setSortBy] = useState('name');
+  const [sortBy, setSortBy] = useState('default'); // <--- MUDANÇA AQUI: Mudei o valor inicial para 'default'
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [products, setProducts] = useState<MockProduct[]>([]);
   const [categories, setCategories] = useState<MockCategory[]>([]);
@@ -38,7 +40,7 @@ export default function Products() {
       if (featured) filters.featured = true;
       
       const filteredProducts = getFilteredProducts(filters);
-      setProducts(filteredProducts);
+      setProducts(filteredProducts); // <-- Esta lista vem na ordem do mockProducts.ts
       setCategories(mockCategories);
       setIsLoading(false);
     };
@@ -46,15 +48,19 @@ export default function Products() {
     loadProducts();
   }, [category, searchQuery, featured]);
 
+  // Lógica de ordenação: Adicionamos um caso para 'default'
   const sortedProducts = [...products].sort((a, b) => {
     switch (sortBy) {
+      case 'default': // <--- MUDANÇA AQUI: Novo caso para ordem padrão
+        return 0; // Retorna 0 para não alterar a ordem, mantendo a ordem original do array 'products'
       case 'price-low':
         return a.price - b.price;
       case 'price-high':
         return b.price - a.price;
       case 'name':
-      default:
         return a.name.localeCompare(b.name);
+      default:
+        return 0; // Fallback para ordem padrão se sortBy for inválido
     }
   });
 
@@ -93,6 +99,7 @@ export default function Products() {
                 <SelectValue placeholder="Ordenar por" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="default">Ordem Padrão</SelectItem> {/* <--- MUDANÇA AQUI: Nova opção */}
                 <SelectItem value="name">Nome A-Z</SelectItem>
                 <SelectItem value="price-low">Menor preço</SelectItem>
                 <SelectItem value="price-high">Maior preço</SelectItem>
@@ -122,7 +129,7 @@ export default function Products() {
 
         {/* Products Grid */}
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"> {/* APENAS AQUI: Mudado lg:grid-cols-4 para lg:grid-cols-3 */}
             {[...Array(8)].map((_, i) => (
               <div key={i} className="space-y-4">
                 <Skeleton className="w-full aspect-[3/4] rounded-lg" />
@@ -153,7 +160,7 @@ export default function Products() {
         ) : (
           <div className={
             viewMode === 'grid' 
-              ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8"
+              ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8" // <<-- APENAS AQUI: Mudado lg:grid-cols-4 para lg:grid-cols-3
               : "space-y-6"
           }>
             {sortedProducts.map((product) => (
