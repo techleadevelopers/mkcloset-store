@@ -1,10 +1,18 @@
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/hooks/use-cart';
-import { type CartItem, type Product } from '@shared/schema';
+import { type MockProduct } from '@/lib/mock-data';
 
 interface CartItemProps {
-  item: CartItem & { product: Product };
+  item: {
+    id: number;
+    productId: number;
+    sessionId: string;
+    quantity: number;
+    size?: string;
+    color?: string;
+    product: MockProduct;
+  };
 }
 
 export default function CartItemComponent({ item }: CartItemProps) {
@@ -22,7 +30,7 @@ export default function CartItemComponent({ item }: CartItemProps) {
     removeFromCart(item.id);
   };
 
-  const itemTotal = parseFloat(item.product.price) * (item.quantity || 1);
+  const itemTotal = item.product.price * (item.quantity || 1);
 
   return (
     <div className="flex items-center space-x-4 py-4 border-b border-gray-100 last:border-b-0">

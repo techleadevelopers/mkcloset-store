@@ -10,6 +10,7 @@ import { useCart } from '@/hooks/use-cart';
 import Header from '@/components/layout/header';
 import Footer from '@/components/layout/footer';
 import WhatsAppButton from '@/components/ui/whatsapp-button';
+import FrontendShippingCalculator from '@/components/shipping/frontend-shipping-calculator';
 import { useLocation } from 'wouter';
 
 export default function Checkout() {
@@ -55,15 +56,14 @@ export default function Checkout() {
     city: '',
     state: '',
     
-    // Pagamento
-    cardNumber: '',
-    cardName: '',
-    expiryDate: '',
-    cvv: '',
-    
     // Entrega
     shippingMethod: 'standard'
   });
+
+  // Estados para o frete
+  const [shippingPrice, setShippingPrice] = useState(0);
+  const [selectedShippingService, setSelectedShippingService] = useState('');
+  const [shippingDeliveryTime, setShippingDeliveryTime] = useState(0);
 
   const steps = [
     { id: 1, title: 'Dados Pessoais', icon: MapPin },
@@ -297,51 +297,44 @@ export default function Checkout() {
 
                   {/* Pagamento */}
                   {currentStep === 3 && (
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold font-playfair">Dados do Cartão</h3> {/* Aplicado font-playfair */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="md:col-span-2">
-                          <Label htmlFor="cardNumber" className="font-montserrat">Número do cartão</Label> {/* Aplicado font-montserrat */}
-                          <Input
-                            id="cardNumber"
-                            value={formData.cardNumber}
-                            onChange={(e) => setFormData({...formData, cardNumber: e.target.value})}
-                            placeholder="**** **** **** ****"
-                            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat" // Aplicado font-montserrat
-                            required
+                    <div className="space-y-6">
+                      <h3 className="text-lg font-semibold font-playfair text-center">Pagamento via Nubank</h3>
+                      
+                      <div className="flex flex-col items-center space-y-4 bg-purple-50 p-6 rounded-lg border border-purple-100">
+                        {/* Logo do Nubank */}
+                        <div className="w-32 h-20 flex items-center justify-center">
+                          <img
+                            src="/images/nubank.jpg"
+                            alt="Nubank"
+                            className="max-w-full max-h-full object-contain"
                           />
                         </div>
-                        <div className="md:col-span-2">
-                          <Label htmlFor="cardName" className="font-montserrat">Nome no cartão</Label> {/* Aplicado font-montserrat */}
-                          <Input
-                            id="cardName"
-                            value={formData.cardName}
-                            onChange={(e) => setFormData({...formData, cardName: e.target.value})}
-                            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat" // Aplicado font-montserrat
-                            required
-                          />
+                        
+                        {/* Informações do pagamento */}
+                        <div className="text-center space-y-2">
+                          <p className="text-sm text-gray-600 font-montserrat">
+                            Valor total: <span className="font-bold text-purple-700">R$ {(total + shippingPrice).toFixed(2)}</span>
+                          </p>
+                          <p className="text-xs text-gray-500 font-montserrat">
+                            Pagamento seguro e rápido pelo Nubank
+                          </p>
                         </div>
-                        <div>
-                          <Label htmlFor="expiryDate" className="font-montserrat">Validade</Label> {/* Aplicado font-montserrat */}
-                          <Input
-                            id="expiryDate"
-                            value={formData.expiryDate}
-                            onChange={(e) => setFormData({...formData, expiryDate: e.target.value})}
-                            placeholder="MM/AA"
-                            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat" // Aplicado font-montserrat
-                            required
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="cvv" className="font-montserrat">CVV</Label> {/* Aplicado font-montserrat */}
-                          <Input
-                            id="cvv"
-                            value={formData.cvv}
-                            onChange={(e) => setFormData({...formData, cvv: e.target.value})}
-                            placeholder="***"
-                            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat" // Aplicado font-montserrat
-                            required
-                          />
+                        
+                        {/* Botão de pagamento */}
+                        <button
+                          onClick={() => {
+                            // Link de pagamento do Nubank (substitua pela URL real)
+                            window.open('https://nubank.com.br/pagamento', '_blank');
+                          }}
+                          className="w-full max-w-xs bg-purple-600 hover:bg-purple-700 text-white font-montserrat font-semibold py-3 px-6 rounded-lg transition duration-200 ease-in-out transform hover:scale-105 shadow-lg"
+                        >
+                          Pagar com Nubank
+                        </button>
+                        
+                        <div className="text-center">
+                          <p className="text-xs text-gray-400 font-montserrat">
+                            Você será redirecionado para a página segura do Nubank
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -443,20 +436,33 @@ export default function Checkout() {
                   </div>
                   <div className="flex justify-between text-sm text-gray-600">
                     <span>Frete</span>
-                    <span className={total >= 199 ? 'text-green-600 font-semibold' : ''}>
-                      {total >= 199 ? 'Grátis' : 'R$ 15,00'}
+                    <span className={shippingPrice > 0 ? 'text-gray-900 font-semibold' : 'text-gray-500'}>
+                      {shippingPrice > 0 ? `R$ ${shippingPrice.toFixed(2)}` : 'Selecione opção'}
                     </span>
                   </div>
-                  {total >= 199 && (
-                    <div className="text-xs text-green-700 bg-green-50 p-3 rounded-lg border border-green-200">
-                      🎉 Parabéns! Você ganhou frete grátis em compras acima de R$ 199,00
-                    </div>
-                  )}
-                  {total < 199 && (
-                    <div className="text-xs text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-200">
-                      💡 Faltam apenas R$ {(199 - total).toFixed(2)} para ganhar frete grátis
-                    </div>
-                  )}
+                  
+                  {/* Calculadora de frete integrada */}
+                  <FrontendShippingCalculator
+                    items={items.map(item => ({
+                      id: item.id.toString(),
+                      product: {
+                        id: item.product.id.toString(),
+                        name: item.product.name,
+                        price: item.product.price,
+                        weight: item.product.weight || 0.3,
+                        dimensions: item.product.dimensions || { length: 20, width: 15, height: 5 }
+                      },
+                      quantity: item.quantity
+                    }))}
+                    zipCode={formData.zipCode}
+                    onZipCodeChange={(zipCode) => setFormData({...formData, zipCode })}
+                    onShippingSelect={(price, service, deliveryTime) => {
+                      setShippingPrice(price);
+                      setSelectedShippingService(service);
+                      setShippingDeliveryTime(deliveryTime);
+                    }}
+                    selectedService={selectedShippingService}
+                  />
                 </div>
                 
                 <Separator className="bg-gray-300" />
@@ -464,7 +470,7 @@ export default function Checkout() {
                 <div className="flex justify-between items-center font-montserrat"> {/* Aplicado font-montserrat */}
                   <span className="text-lg font-bold text-gray-900">Total</span>
                   <span className="text-2xl font-bold text-gray-900">
-                    R$ {(total + (total >= 199 ? 0 : 15)).toFixed(2)}
+                    R$ {(total + shippingPrice).toFixed(2)}
                   </span>
                 </div>
               </CardContent>

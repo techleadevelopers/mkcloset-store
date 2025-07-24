@@ -16,6 +16,12 @@ export interface MockProduct {
   discount?: number;
   stock: number;
   images?: string[];
+  weight?: number; // Peso em kg para cálculo de frete
+  dimensions?: {
+    length: number; // cm
+    width: number; // cm  
+    height: number; // cm
+  };
 }
 
 export interface MockCategory {
@@ -57,7 +63,9 @@ export const mockProducts: MockProduct[] = [
     colors: ["Bordo"],
     isNew: true,
     isFeatured: true, // DEFINIDO COMO DESTAQUE
-    stock: 15
+    stock: 15,
+    weight: 0.4,
+    dimensions: { length: 25, width: 18, height: 3 }
   },
   {
     id: 2,
@@ -71,7 +79,9 @@ export const mockProducts: MockProduct[] = [
     colors: ["Bordo"],
     isNew: false,
     isFeatured: false, // Não é destaque
-    stock: 10
+    stock: 10,
+    weight: 0.2,
+    dimensions: { length: 20, width: 15, height: 2 }
   },
   {
     id: 3,
@@ -85,7 +95,9 @@ export const mockProducts: MockProduct[] = [
     colors: ["Bordo"],
     isNew: false,
     isFeatured: false, // Não é destaque
-    stock: 10
+    stock: 10,
+    weight: 0.25,
+    dimensions: { length: 22, width: 16, height: 2 }
   },
   // --- Conjunto Glamour e Peças ---
   {
@@ -101,7 +113,9 @@ export const mockProducts: MockProduct[] = [
     colors: ["Preto"],
     isNew: true,
     isFeatured: true, // DEFINIDO COMO DESTAQUE
-    stock: 15
+    stock: 15,
+    weight: 0.45,
+    dimensions: { length: 26, width: 19, height: 4 }
   },
   {
     id: 5,
@@ -115,7 +129,9 @@ export const mockProducts: MockProduct[] = [
     colors: ["Preto"],
     isNew: false,
     isFeatured: false, // Não é destaque
-    stock: 10
+    stock: 10,
+    weight: 0.25,
+    dimensions: { length: 21, width: 16, height: 2 }
   },
   {
     id: 6,
@@ -129,7 +145,9 @@ export const mockProducts: MockProduct[] = [
     colors: ["Preto"],
     isNew: false,
     isFeatured: false, // Não é destaque
-    stock: 10
+    stock: 10,
+    weight: 0.2,
+    dimensions: { length: 18, width: 14, height: 2 }
   },
   // --- Outros Produtos ---
   {
@@ -145,7 +163,9 @@ export const mockProducts: MockProduct[] = [
     colors: ["Off White"],
     isNew: true,
     isFeatured: true, // DEFINIDO COMO DESTAQUE
-    stock: 10
+    stock: 10,
+    weight: 0.35,
+    dimensions: { length: 24, width: 17, height: 3 }
   },
   {
     id: 8,
@@ -159,7 +179,9 @@ export const mockProducts: MockProduct[] = [
     colors: ["Preto"],
     isNew: false,
     isFeatured: true, // DEFINIDO COMO DESTAQUE (para ter 4 produtos nos destaques)
-    stock: 5
+    stock: 5,
+    weight: 0.3,
+    dimensions: { length: 30, width: 20, height: 2 }
   },
 ];
 
