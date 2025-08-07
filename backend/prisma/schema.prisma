@@ -1,0 +1,236 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // ou "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums para status de pedido e tipos de transação
+enum OrderStatus {
+  PENDING     // Aguardando pagamento
+  PAID        // Pagamento confirmado
+  PROCESSING  // Em preparação/separação
+  SHIPPED     // Enviado
+  DELIVERED   // Entregue
+  CANCELLED   // Cancelado
+  REFUNDED    // Reembolsado
+}
+
+// NOVO: Enum para tipos de transação
+enum TransactionType {
+  PAYMENT    // Pagamento de um pedido
+  REFUND     // Reembolso de um pedido
+}
+
+// Usuários
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  password  String
+  name      String?
+  phone     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  addresses Address[]
+  orders    Order[]
+  cart      Cart?     // Um usuário pode ter um carrinho
+  wishlist  Wishlist? // Um usuário pode ter uma wishlist
+  transactions Transaction[] // NOVO: Transações feitas por este usuário
+}
+
+// Endereços de Usuários
+model Address {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  street     String
+  number     String
+  complement String?
+  neighborhood String
+  city       String
+  state      String
+  zipCode    String
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// Categorias de Produtos
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  slug        String    @unique // Para URLs amigáveis
+  description String?
+  imageUrl    String?
+  products    Product[]
+  createdAt   DateTime  @default(now()) // Adicionado para consistência
+  updatedAt   DateTime  @updatedAt // Adicionado para consistência
+}
+
+// Produtos
+model Product {
+  id           String      @id @default(uuid())
+  name         String
+  description  String?
+  price        Decimal     @db.Decimal(10, 2) // ALTERADO: De Float para Decimal
+  originalPrice Decimal?   @db.Decimal(10, 2) // ALTERADO: De Float para Decimal
+  imageUrl     String
+  images       String[]    @default([]) // Array de URLs de imagens
+  categoryId   String
+  category     Category    @relation(fields: [categoryId], references: [id])
+  sizes        String[]    @default([]) // Ex: ["P", "M", "G"]
+  colors       String[]    @default([]) // Ex: ["Vermelho", "Azul"]
+  isNew        Boolean     @default(false)
+  isFeatured   Boolean     @default(false) // Para produtos em destaque
+  discount     Int?        // Percentual de desconto
+  stock        Int         @default(0) // Quantidade em estoque
+  weight       Float?      // Peso em kg para frete
+  dimensions   Json?       // { length: Float, width: Float, height: Float } em cm
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  cartItems    CartItem[]
+  wishlistItems WishlistItem[]
+  orderItems   OrderItem[]
+}
+
+// Carrinho de Compras (um por usuário)
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String     @unique // Relacionamento 1:1 com User
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+// Itens do Carrinho
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int
+  size      String?
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Wishlist (Lista de Desejos)
+model Wishlist {
+  id        String         @id @default(uuid())
+  userId    String         @unique // Relacionamento 1:1 com User
+  user      User           @relation(fields: [userId], references: [id])
+  items     WishlistItem[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+// Itens da Wishlist
+model WishlistItem {
+  id        String   @id @default(uuid())
+  wishlistId String
+  wishlist  Wishlist @relation(fields: [wishlistId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Pedidos
+model Order {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  status        OrderStatus @default(PENDING)
+  totalAmount   Decimal     @db.Decimal(10, 2) // ALTERADO: De Float para Decimal
+  shippingPrice Decimal     @db.Decimal(10, 2) // ALTERADO: De Float para Decimal
+  // Endereço de entrega do pedido (snapshot)
+  shippingAddressStreet     String
+  shippingAddressNumber     String
+  shippingAddressComplement String?
+  shippingAddressNeighborhood String
+  shippingAddressCity       String
+  shippingAddressState      String
+  shippingAddressZipCode    String
+  paymentMethod String
+  paymentDetails Json? // Dados específicos do gateway de pagamento
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  items         OrderItem[]
+
+  // CORRIGIDO: Relacionamento 1:1 com Transaction
+  // O campo 'transaction' aqui apenas define o lado inverso do relacionamento
+  // Sem 'fields' ou 'references' aqui.
+  transaction   Transaction?
+  // O orderId na Transaction é que fará a ligação.
+
+  // NOVO: Opcional: ID do cupom usado
+  couponId      String?
+  coupon        Coupon?      @relation(fields: [couponId], references: [id])
+}
+
+// Itens do Pedido
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Decimal  @db.Decimal(10, 2) // ALTERADO: De Float para Decimal
+  size      String?
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// NOVO: Modelo para Transações Financeiras (para pagamentos de pedidos)
+model Transaction {
+  id                 String          @id @default(uuid())
+  userId             String          // O usuário que realizou a transação
+  user               User            @relation(fields: [userId], references: [id])
+  amount             Decimal         @db.Decimal(10, 2) // Valor da transação
+  type               TransactionType // Tipo da transação (PAYMENT, REFUND)
+  status             String          // Status da transação (PENDING, COMPLETED, FAILED, REFUNDED, etc.)
+  description        String?         // Descrição da transação (ex: "Pagamento do pedido #XYZ")
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  // CORRIGIDO: Relacionamento 1:1 com Order
+  // Este lado define a chave estrangeira (orderId) e a referência ao Order.id
+  order              Order?          @relation(fields: [orderId], references: [id])
+  orderId            String?         @unique // Garante que a transação esteja ligada a um único pedido
+
+  // Propriedades para integração com gateway de pagamento
+  gatewayTransactionId String?       // ID da transação no gateway de pagamento (PagSeguro, Stripe, etc.)
+  qrCodeUrl          String?       // URL do QR Code gerado pelo gateway de pagamento (se aplicável)
+
+  // Referência interna para transações (se necessário para algum controle interno)
+  transactionRef     String?
+
+  // ID do cupom associado à transação (se houver)
+  couponId           String?
+  coupon             Coupon?         @relation(fields: [couponId], references: [id])
+}
+
+// NOVO: Modelo para Cupons de Desconto
+model Coupon {
+  id               String        @id @default(uuid())
+  code             String        @unique // Código do cupom (ex: "DESCONTO10")
+  discountAmount   Decimal?      @db.Decimal(10, 2) // Valor do desconto (ex: 10.00)
+  discountPercentage Int?        // Percentual do desconto (ex: 10 para 10%)
+  expirationDate   DateTime?
+  usageLimit       Int?          // Limite de usos total
+  usedCount        Int           @default(0) // Quantidade de vezes que foi usado
+  isActive         Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  orders           Order[]       // Pedidos que usaram este cupom
+  transactions     Transaction[] // Transações que usaram este cupom (para rastreamento)
+}

@@ -1,3 +1,5 @@
+// components/layout/header.tsx
+
 import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { Search, Heart, ShoppingBag, Menu, X } from 'lucide-react';
@@ -8,6 +10,7 @@ import { useCart } from '@/hooks/use-cart';
 import { useWishlist } from '@/hooks/use-wishlist';
 import { useUIStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast'; // Importar useToast
 
 export default function Header() {
   const [, setLocation] = useLocation();
@@ -15,13 +18,14 @@ export default function Header() {
   const { itemCount } = useCart();
   const { count: wishlistCount } = useWishlist();
   const { isCartOpen, isMobileMenuOpen, toggleCart, toggleMobileMenu } = useUIStore();
+  const { toast } = useToast(); // Inicializar useToast
 
   const navigation = [
-    { name: 'Novidades', href: '/products?featured=true' },
+    { name: 'Novidades', href: '/products?isNew=true' }, // Ajustado para 'isNew'
     { name: 'Conjuntos', href: '/products/conjuntos' },
     { name: 'Vestidos', href: '/products/vestidos' },
     { name: 'Saias', href: '/products/saias' },
-    { name: 'Top', href: '/products/tops' },
+    { name: 'Top', href: '/products/blusas' }, // 'Top' mapeia para 'Blusas'
   ];
 
   const handleSearch = (e: React.FormEvent) => {
@@ -29,19 +33,30 @@ export default function Header() {
     if (searchQuery.trim()) {
       setLocation(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
       setSearchQuery('');
+      if (isMobileMenuOpen) toggleMobileMenu(); // Fechar menu mobile após busca
     }
   };
+
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user_data'); // Remover dados do usuário também
+    toast({ title: "Logout realizado", description: "Você foi desconectado(a)." });
+    setLocation('/login'); // Redireciona para a página de login
+    if (isMobileMenuOpen) toggleMobileMenu(); // Fechar menu mobile após logout
+  };
+
+  const isLoggedIn = !!localStorage.getItem('access_token');
 
   return (
     <header className="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-8 lg:px-8">
-        <div className="flex justify-between items-center h-20"> {/* Ajuste na altura do header */}
+        <div className="flex justify-between items-center h-20">
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/">
               <img
                 src="/images/logo.jpg"
-                className="h-[120px] w-[120px] mr-10 object-contain" // Definindo altura e largura
+                className="h-[120px] w-[120px] mr-10 object-contain"
                 alt="Logo"
               />
             </Link>
@@ -96,18 +111,26 @@ export default function Header() {
               <Search className="h-5 w-5" />
             </Button>
 
-            {/* Login/Register */}
+            {/* Login/Register or Logout */}
             <div className="hidden md:flex items-center space-x-2">
-              <Link href="/login">
-                <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
-                  Entrar
+              {isLoggedIn ? (
+                <Button variant="ghost" size="sm" onClick={handleLogout} className="text-gray-600 hover:text-gray-900">
+                  Sair
                 </Button>
-              </Link>
-              <Link href="/register">
-                <Button size="sm" className="bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white">
-                  Cadastrar
-                </Button>
-              </Link>
+              ) : (
+                <>
+                  <Link href="/login">
+                    <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
+                      Entrar
+                    </Button>
+                  </Link>
+                  <Link href="/register">
+                    <Button size="sm" className="bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white">
+                      Cadastrar
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
 
             {/* Wishlist */}
@@ -166,6 +189,35 @@ export default function Header() {
               </Link>
             ))}
             
+            {/* Mobile Login/Register or Logout */}
+            {isLoggedIn ? (
+              <div
+                className="block px-4 py-2 text-gray-700 hover:bg-gray-50 hover:text-purple-600 transition-colors cursor-pointer"
+                onClick={handleLogout}
+              >
+                Sair
+              </div>
+            ) : (
+              <>
+                <Link href="/login">
+                  <div
+                    className="block px-4 py-2 text-gray-700 hover:bg-gray-50 hover:text-purple-600 transition-colors cursor-pointer"
+                    onClick={() => toggleMobileMenu()}
+                  >
+                    Entrar
+                  </div>
+                </Link>
+                <Link href="/register">
+                  <div
+                    className="block px-4 py-2 text-gray-700 hover:bg-gray-50 hover:text-purple-600 transition-colors cursor-pointer"
+                    onClick={() => toggleMobileMenu()}
+                  >
+                    Cadastrar
+                  </div>
+                </Link>
+              </>
+            )}
+
             {/* Mobile Search */}
             <form onSubmit={handleSearch} className="px-4 py-2">
               <div className="flex space-x-2">

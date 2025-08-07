@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { MapPin, CreditCard, Truck, ShoppingBag, Check } from 'lucide-react';
+import { MapPin, CreditCard, ShoppingBag, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useCart } from '@/hooks/use-cart';
 import Header from '@/components/layout/header';
@@ -12,95 +12,159 @@ import Footer from '@/components/layout/footer';
 import WhatsAppButton from '@/components/ui/whatsapp-button';
 import FrontendShippingCalculator from '@/components/shipping/frontend-shipping-calculator';
 import { useLocation } from 'wouter';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import { Address, Order, ProcessPaymentDto, PaymentMethod } from '@/types/backend';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Checkout() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { items, total, clearCart } = useCart();
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1);
+  const { items: cartItems, total: cartTotal, clearCart, isLoading: isLoadingCart } = useCart();
+  const queryClient = useQueryClient();
 
-  // Redirecionar se carrinho vazio
-  if (items.length === 0) {
-    return (
-      <div className="min-h-screen bg-white font-montserrat"> {/* Aplicado font-montserrat */}
-        <Header />
-        <div className="container mx-auto px-4 py-16 text-center">
-          <ShoppingBag className="w-20 h-20 text-gray-400 mx-auto mb-6" />
-          <h1 className="text-2xl font-bold text-gray-900 mb-4 font-playfair">Carrinho Vazio</h1> {/* Aplicado font-playfair */}
-          <p className="text-gray-600 mb-8 font-montserrat">Adicione produtos ao carrinho para continuar</p> {/* Aplicado font-montserrat */}
-          <Button 
-            onClick={() => setLocation('/')}
-            className="bg-gray-900 hover:bg-black text-white rounded-xl px-8 py-3 font-montserrat" // Aplicado font-montserrat
-          >
-            Continuar Comprando
-          </Button>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
-  
-  const [formData, setFormData] = useState({
-    // Dados pessoais
-    name: '',
-    email: '',
-    phone: '',
-    
-    // Endereço
-    zipCode: '',
-    street: '',
-    number: '',
-    complement: '',
-    neighborhood: '',
-    city: '',
-    state: '',
-    
-    // Entrega
-    shippingMethod: 'standard'
+  const [currentStep, setCurrentStep] = useState(1);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [shippingPrice, setShippingPrice] = useState<number>(0);
+  const [selectedShippingService, setSelectedShippingService] = useState<string | null>(null);
+  const [shippingDeliveryTime, setShippingDeliveryTime] = useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CREDIT_CARD');
+  const [cpf, setCpf] = useState<string>('');
+
+  // 1. Buscar endereços do usuário
+  const { data: addresses, isLoading: isLoadingAddresses, error: addressesError } = useQuery<Address[], Error>({
+    queryKey: ['userAddresses'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/users/me/addresses');
+      return res.json();
+    },
+    enabled: !!localStorage.getItem('access_token'),
   });
 
-  // Estados para o frete
-  const [shippingPrice, setShippingPrice] = useState(0);
-  const [selectedShippingService, setSelectedShippingService] = useState('');
-  const [shippingDeliveryTime, setShippingDeliveryTime] = useState(0);
+  // Efeito colateral para definir o endereço padrão quando os dados chegam com sucesso
+  useEffect(() => {
+    if (addresses && addresses.length > 0 && !selectedAddressId) {
+      const defaultAddress = addresses.find(addr => addr.isDefault) || addresses[0];
+      if (defaultAddress) {
+        setSelectedAddressId(defaultAddress.id);
+      }
+    }
+  }, [addresses, selectedAddressId]);
+  
+  // Efeito colateral para lidar com erros da requisição
+  useEffect(() => {
+    if (addressesError) {
+      console.error("Erro ao carregar endereços:", addressesError);
+      toast({ title: "Erro", description: "Não foi possível carregar seus endereços.", variant: "destructive" });
+    }
+  }, [addressesError, toast]);
 
-  const steps = [
-    { id: 1, title: 'Dados Pessoais', icon: MapPin },
-    { id: 2, title: 'Endereço', icon: MapPin },
-    { id: 3, title: 'Pagamento', icon: CreditCard },
-    { id: 4, title: 'Revisão', icon: Check }
-  ];
+  const selectedAddress = addresses?.find(addr => addr.id === selectedAddressId);
+  const [zipCode, setZipCode] = useState(selectedAddress?.zipCode || '');
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsProcessing(true);
+  useEffect(() => {
+    if (selectedAddress) {
+      setZipCode(selectedAddress.zipCode);
+    }
+  }, [selectedAddress]);
+
+  // 2. Mutação para criar o pedido
+  const createOrderMutation = useMutation<Order, Error, { shippingAddressId: string; paymentMethod: PaymentMethod; shippingService: string; shippingPrice: number }>({
+    mutationFn: async (orderData) => {
+      const res = await apiRequest('POST', '/orders', orderData);
+      return res.json();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro ao criar pedido", description: error.message || "Ocorreu um erro ao criar seu pedido.", variant: "destructive" });
+    },
+  });
+
+  // 3. Mutação para processar o pagamento
+  const processPaymentMutation = useMutation<Order, Error, { orderId: string, paymentData: ProcessPaymentDto }>({
+    mutationFn: async ({ orderId, paymentData }) => {
+      const res = await apiRequest('POST', `/payments/process/${orderId}`, paymentData);
+      return res.json();
+    },
+    onSuccess: (order: Order) => {
+      toast({ title: "Pagamento processado!", description: `Seu pedido #${order.id} foi finalizado.` });
+      clearCart();
+      queryClient.invalidateQueries({ queryKey: ['cart'] });
+      queryClient.invalidateQueries({ queryKey: ['userAddresses'] });
+      setLocation(`/order-success?orderId=${order.id}`);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro ao processar pagamento", description: error.message || "Ocorreu um erro ao processar o pagamento.", variant: "destructive" });
+    },
+  });
+
+  const handlePlaceOrder = async () => {
+    if (!localStorage.getItem('access_token')) {
+      toast({ title: "Erro", description: "Você precisa estar logado para finalizar a compra.", variant: "destructive" });
+      setLocation('/login');
+      return;
+    }
+
+    if (cartItems.length === 0) {
+      toast({ title: "Erro", description: "Seu carrinho está vazio.", variant: "destructive" });
+      setLocation('/products');
+      return;
+    }
+    
+    if (!selectedAddressId) {
+      toast({ title: "Erro", description: "Por favor, selecione um endereço de entrega.", variant: "destructive" });
+      return;
+    }
+    if (!selectedShippingService || shippingPrice === 0) {
+      toast({ title: "Erro", description: "Por favor, selecione uma opção de frete.", variant: "destructive" });
+      return;
+    }
 
     try {
-      // Simular processamento do pedido
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      clearCart();
-      
-      toast({
-        title: "Pedido realizado com sucesso!",
-        description: "Você será redirecionado para a página de confirmação.",
+      const newOrder = await createOrderMutation.mutateAsync({
+        shippingAddressId: selectedAddressId,
+        paymentMethod,
+        shippingService: selectedShippingService,
+        shippingPrice,
       });
-      
-      setLocation('/order-success');
+
+      if (!newOrder.id) {
+        throw new Error('Não foi possível obter o ID do pedido.');
+      }
+
+      const paymentData: ProcessPaymentDto = {
+        paymentMethod,
+        clientCpf: cpf || undefined,
+      };
+
+      await processPaymentMutation.mutateAsync({
+        orderId: newOrder.id,
+        paymentData,
+      });
+
     } catch (error) {
-      toast({
-        title: "Erro no processamento",
-        description: "Ocorreu um erro ao processar seu pedido. Tente novamente.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsProcessing(false);
+      console.error(error);
     }
   };
 
+  const steps = [
+    { id: 1, title: 'Endereço & Frete', icon: MapPin },
+    { id: 2, title: 'Pagamento', icon: CreditCard },
+    { id: 3, title: 'Revisão', icon: Check }
+  ];
+
   const nextStep = () => {
-    if (currentStep < 4) {
+    if (currentStep === 1) {
+      if (!selectedAddressId) {
+        toast({ title: "Erro", description: "Por favor, selecione um endereço de entrega.", variant: "destructive" });
+        return;
+      }
+      if (!selectedShippingService || shippingPrice === 0) {
+        toast({ title: "Erro", description: "Por favor, selecione uma opção de frete.", variant: "destructive" });
+        return;
+      }
+    }
+    if (currentStep < steps.length) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -111,24 +175,28 @@ export default function Checkout() {
     }
   };
 
-  if (items.length === 0) {
+  useEffect(() => {
+    if (!isLoadingCart && cartItems.length === 0) {
+      toast({ title: "Carrinho Vazio", description: "Adicione produtos ao carrinho para continuar." });
+      setLocation('/products');
+    }
+    if (!localStorage.getItem('access_token') && !isLoadingAddresses) {
+      toast({ title: "Acesso Negado", description: "Você precisa estar logado para acessar o checkout." });
+      setLocation('/login');
+    }
+  }, [isLoadingCart, cartItems.length, isLoadingAddresses, setLocation, toast]);
+
+  const isPlacingOrder = createOrderMutation.isPending || processPaymentMutation.isPending;
+
+  if (isLoadingCart || isLoadingAddresses || cartItems.length === 0 || !localStorage.getItem('access_token')) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-montserrat"> {/* Aplicado font-montserrat */}
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-montserrat">
         <Header />
-        <div className="container mx-auto px-4 py-16">
-          <div className="text-center">
-            <ShoppingBag className="w-24 h-24 text-gray-300 mx-auto mb-6" />
-            <h1 className="text-3xl font-bold text-gray-800 mb-4 font-playfair">Seu carrinho está vazio</h1> {/* Aplicado font-playfair */}
-            <p className="text-gray-600 mb-8 font-montserrat"> {/* Aplicado font-montserrat */}
-              Adicione alguns produtos ao seu carrinho para continuar com o checkout.
-            </p>
-            <Button
-              onClick={() => setLocation('/products')}
-              className="bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white px-8 py-3 font-montserrat" // Aplicado font-montserrat
-            >
-              Ver Produtos
-            </Button>
-          </div>
+        <div className="container mx-auto px-4 py-16 text-center">
+          <ShoppingBag className="w-20 h-20 text-gray-400 mx-auto mb-6" />
+          <h1 className="text-2xl font-bold text-gray-900 mb-4 font-playfair">Carregando Checkout...</h1>
+          <p className="text-gray-600 mb-8 font-montserrat">Por favor, aguarde enquanto preparamos seu pedido.</p>
+          <Skeleton className="h-12 w-48 mx-auto" />
         </div>
         <Footer />
       </div>
@@ -136,13 +204,12 @@ export default function Checkout() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-montserrat"> {/* Aplicado font-montserrat como padrão para o corpo */}
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-montserrat">
       <Header />
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-4 font-playfair">Finalizar Compra</h1> {/* Aplicado font-playfair */}
+          <h1 className="text-3xl font-bold text-gray-800 mb-4 font-playfair">Finalizar Compra</h1>
           
-          {/* Progress Steps */}
           <div className="flex items-center justify-between mb-8">
             {steps.map((step, index) => (
               <div key={step.id} className="flex items-center">
@@ -155,7 +222,7 @@ export default function Checkout() {
                 </div>
                 <span className={`ml-2 font-medium ${
                   currentStep >= step.id ? 'text-gray-800' : 'text-gray-500'
-                } font-montserrat`}> {/* Aplicado font-montserrat */}
+                } font-montserrat`}>
                   {step.title}
                 </span>
                 {index < steps.length - 1 && (
@@ -169,239 +236,188 @@ export default function Checkout() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Formulário */}
           <div className="lg:col-span-2">
             <Card className="shadow-lg border-0">
               <CardHeader>
-                <CardTitle className="font-playfair">Informações de Entrega e Pagamento</CardTitle> {/* Aplicado font-playfair */}
+                <CardTitle className="font-playfair">Informações de Entrega e Pagamento</CardTitle>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* Dados Pessoais */}
-                  {currentStep === 1 && (
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold font-playfair">Dados Pessoais</h3> {/* Aplicado font-playfair */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="name" className="font-montserrat">Nome completo</Label> {/* Aplicado font-montserrat */}
-                          <Input
-                            id="name"
-                            value={formData.name}
-                            onChange={(e) => setFormData({...formData, name: e.target.value})}
-                            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat" // Aplicado font-montserrat
-                            required
-                          />
+                {currentStep === 1 && (
+                  <div className="space-y-6">
+                    <h3 className="text-lg font-semibold font-playfair">1. Endereço de Entrega</h3>
+                    <RadioGroup value={selectedAddressId || undefined} onValueChange={setSelectedAddressId}>
+                      {addresses && addresses.length === 0 ? (
+                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700">
+                          Você ainda não possui endereços cadastrados. Por favor, adicione um em seu perfil.
                         </div>
-                        <div>
-                          <Label htmlFor="email" className="font-montserrat">Email</Label> {/* Aplicado font-montserrat */}
-                          <Input
-                            id="email"
-                            type="email"
-                            value={formData.email}
-                            onChange={(e) => setFormData({...formData, email: e.target.value})}
-                            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat" // Aplicado font-montserrat
-                            required
-                          />
-                        </div>
-                        <div className="md:col-span-2">
-                          <Label htmlFor="phone" className="font-montserrat">Telefone</Label> {/* Aplicado font-montserrat */}
-                          <Input
-                            id="phone"
-                            value={formData.phone}
-                            onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat" // Aplicado font-montserrat
-                            required
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                      ) : (
+                        addresses?.map((addr: Address) => (
+                          <div key={addr.id} className="flex items-center space-x-2 p-3 border rounded-md">
+                            <RadioGroupItem value={addr.id} id={`address-${addr.id}`} />
+                            <Label htmlFor={`address-${addr.id}`} className="flex flex-col">
+                              <span className="font-medium">{addr.street}, {addr.number} {addr.complement && `- ${addr.complement}`}</span>
+                              <span className="text-sm text-gray-600">{addr.neighborhood}, {addr.city} - {addr.state}, {addr.zipCode}</span>
+                            </Label>
+                          </div>
+                        ))
+                      )}
+                    </RadioGroup>
 
-                  {/* Endereço */}
-                  {currentStep === 2 && (
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold font-playfair">Endereço de Entrega</h3> {/* Aplicado font-playfair */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <Label htmlFor="zipCode" className="font-montserrat">CEP</Label> {/* Aplicado font-montserrat */}
-                          <Input
-                            id="zipCode"
-                            value={formData.zipCode}
-                            onChange={(e) => setFormData({...formData, zipCode: e.target.value})}
-                            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat" // Aplicado font-montserrat
-                            required
-                          />
-                        </div>
-                        <div className="md:col-span-2">
-                          <Label htmlFor="street" className="font-montserrat">Rua</Label> {/* Aplicado font-montserrat */}
-                          <Input
-                            id="street"
-                            value={formData.street}
-                            onChange={(e) => setFormData({...formData, street: e.target.value})}
-                            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat" // Aplicado font-montserrat
-                            required
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="number" className="font-montserrat">Número</Label> {/* Aplicado font-montserrat */}
-                          <Input
-                            id="number"
-                            value={formData.number}
-                            onChange={(e) => setFormData({...formData, number: e.target.value})}
-                            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat" // Aplicado font-montserrat
-                            required
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="complement" className="font-montserrat">Complemento</Label> {/* Aplicado font-montserrat */}
-                          <Input
-                            id="complement"
-                            value={formData.complement}
-                            onChange={(e) => setFormData({...formData, complement: e.target.value})}
-                            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat" // Aplicado font-montserrat
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="neighborhood" className="font-montserrat">Bairro</Label> {/* Aplicado font-montserrat */}
-                          <Input
-                            id="neighborhood"
-                            value={formData.neighborhood}
-                            onChange={(e) => setFormData({...formData, neighborhood: e.target.value})}
-                            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat" // Aplicado font-montserrat
-                            required
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="city" className="font-montserrat">Cidade</Label> {/* Aplicado font-montserrat */}
-                          <Input
-                            id="city"
-                            value={formData.city}
-                            onChange={(e) => setFormData({...formData, city: e.target.value})}
-                            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat" // Aplicado font-montserrat
-                            required
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="state" className="font-montserrat">Estado</Label> {/* Aplicado font-montserrat */}
-                          <Input
-                            id="state"
-                            value={formData.state}
-                            onChange={(e) => setFormData({...formData, state: e.target.value})}
-                            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat" // Aplicado font-montserrat
-                            required
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                    <Separator />
 
-                  {/* Pagamento */}
-                  {currentStep === 3 && (
-                    <div className="space-y-6">
-                      <h3 className="text-lg font-semibold font-playfair text-center">Pagamento via Nubank</h3>
-                      
-                      <div className="flex flex-col items-center space-y-4 bg-purple-50 p-6 rounded-lg border border-purple-100">
-                        {/* Logo do Nubank */}
-                        <div className="w-32 h-20 flex items-center justify-center">
-                          <img
-                            src="/images/nubank.jpg"
-                            alt="Nubank"
-                            className="max-w-full max-h-full object-contain"
-                          />
-                        </div>
-                        
-                        {/* Informações do pagamento */}
-                        <div className="text-center space-y-2">
-                          <p className="text-sm text-gray-600 font-montserrat">
-                            Valor total: <span className="font-bold text-purple-700">R$ {(total + shippingPrice).toFixed(2)}</span>
-                          </p>
-                          <p className="text-xs text-gray-500 font-montserrat">
-                            Pagamento seguro e rápido pelo Nubank
-                          </p>
-                        </div>
-                        
-                        {/* Botão de pagamento */}
-                        <button
-                          onClick={() => {
-                            // Link de pagamento do Nubank (substitua pela URL real)
-                            window.open('https://nubank.com.br/pagamento', '_blank');
-                          }}
-                          className="w-full max-w-xs bg-purple-600 hover:bg-purple-700 text-white font-montserrat font-semibold py-3 px-6 rounded-lg transition duration-200 ease-in-out transform hover:scale-105 shadow-lg"
-                        >
-                          Pagar com Nubank
-                        </button>
-                        
-                        <div className="text-center">
-                          <p className="text-xs text-gray-400 font-montserrat">
-                            Você será redirecionado para a página segura do Nubank
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Revisão */}
-                  {currentStep === 4 && (
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold font-playfair">Revisar Pedido</h3> {/* Aplicado font-playfair */}
-                      <div className="space-y-4 p-4 bg-gray-50 rounded-lg font-montserrat"> {/* Aplicado font-montserrat */}
-                        <p><strong>Nome:</strong> {formData.name}</p>
-                        <p><strong>Email:</strong> {formData.email}</p>
-                        <p><strong>Endereço:</strong> {formData.street}, {formData.number} - {formData.neighborhood}, {formData.city}/{formData.state}</p>
-                        <p><strong>Método de pagamento:</strong> Cartão de crédito terminado em {formData.cardNumber.slice(-4)}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Navigation Buttons */}
-                  <div className="flex justify-between pt-6">
-                    {currentStep > 1 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={prevStep}
-                        className="border-gray-200 hover:bg-gray-50 font-montserrat" // Aplicado font-montserrat
-                      >
-                        Voltar
-                      </Button>
-                    )}
-                    
-                    {currentStep < 4 ? (
-                      <Button
-                        type="button"
-                        onClick={nextStep}
-                        className="ml-auto bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white font-montserrat" // Aplicado font-montserrat
-                      >
-                        Continuar
-                      </Button>
+                    <h3 className="text-lg font-semibold font-playfair">2. Opções de Frete</h3>
+                    {selectedAddress ? (
+                      <FrontendShippingCalculator
+                        items={cartItems.map(item => ({
+                          id: item.id,
+                          quantity: item.quantity,
+                          product: {
+                            id: item.product.id,
+                            name: item.product.name,
+                            price: item.product.price,
+                            weight: item.product.weight || undefined,
+                            dimensions: item.product.dimensions || undefined,
+                          }
+                        }))}
+                        zipCode={zipCode}
+                        onZipCodeChange={setZipCode}
+                        onShippingSelect={(price, service, deliveryTime) => {
+                          setShippingPrice(price);
+                          setSelectedShippingService(service);
+                          setShippingDeliveryTime(deliveryTime);
+                        }}
+                        selectedService={selectedShippingService || undefined}
+                      />
                     ) : (
-                      <Button
-                        type="submit"
-                        disabled={isProcessing}
-                        className="ml-auto bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white px-8 py-3 font-montserrat" // Aplicado font-montserrat
-                      >
-                        {isProcessing ? 'Processando...' : 'Finalizar Pedido'}
-                      </Button>
+                      <p className="text-gray-600">Selecione um endereço para calcular o frete.</p>
                     )}
                   </div>
-                </form>
+                )}
+
+                {currentStep === 2 && (
+                  <div className="space-y-6">
+                    <h3 className="text-lg font-semibold font-playfair text-center">3. Método de Pagamento</h3>
+                    
+                    <RadioGroup value={paymentMethod} onValueChange={(value: PaymentMethod) => setPaymentMethod(value)}>
+                      <div className="flex items-center space-x-2 p-3 border rounded-md">
+                        <RadioGroupItem value="CREDIT_CARD" id="payment-credit-card" />
+                        <Label htmlFor="payment-credit-card">Cartão de Crédito</Label>
+                      </div>
+                      <div className="flex items-center space-x-2 p-3 border rounded-md">
+                        <RadioGroupItem value="PIX" id="payment-pix" />
+                        <Label htmlFor="payment-pix">PIX</Label>
+                      </div>
+                      <div className="flex items-center space-x-2 p-3 border rounded-md">
+                        <RadioGroupItem value="BOLETO" id="payment-boleto" />
+                        <Label htmlFor="payment-boleto">Boleto Bancário</Label>
+                      </div>
+                    </RadioGroup>
+
+                    {paymentMethod === 'CREDIT_CARD' && (
+                      <div className="mt-4 p-4 border rounded-md bg-gray-50">
+                        <p className="text-sm text-gray-700">
+                          Para uma integração real de cartão de crédito, você usaria um SDK de gateway de pagamento (ex: PagSeguro Checkout Transparente) aqui para coletar os dados do cartão de forma segura e gerar um token.
+                        </p>
+                        <p className="text-sm text-gray-700 mt-2">
+                          Por enquanto, o pagamento será simulado no backend.
+                        </p>
+                      </div>
+                    )}
+
+                    {paymentMethod === 'PIX' && (
+                      <div className="mt-4 p-4 space-y-4 border rounded-md bg-gray-50">
+                        <p className="text-sm text-gray-700">
+                          Ao finalizar o pedido, um QR Code PIX será gerado para pagamento. Por favor, insira seu CPF para emissão da cobrança.
+                        </p>
+                        <div>
+                          <Label htmlFor="cpf" className="font-semibold text-sm">CPF do Pagador</Label>
+                          <Input
+                            id="cpf"
+                            type="text"
+                            placeholder="000.000.000-00"
+                            value={cpf}
+                            onChange={(e) => setCpf(e.target.value)}
+                            className="mt-1"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {currentStep === 3 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold font-playfair">4. Revisar Pedido</h3>
+                    <div className="space-y-4 p-4 bg-gray-50 rounded-lg font-montserrat">
+                      <h4 className="font-semibold">Endereço de Entrega:</h4>
+                      {selectedAddress ? (
+                        <>
+                          <p>{selectedAddress.street}, {selectedAddress.number} {selectedAddress.complement && `- ${selectedAddress.complement}`}</p>
+                          <p>{selectedAddress.neighborhood}, {selectedAddress.city} - {selectedAddress.state}, {selectedAddress.zipCode}</p>
+                        </>
+                      ) : (
+                        <p>Nenhum endereço selecionado.</p>
+                      )}
+                      
+                      <h4 className="font-semibold mt-4">Método de Frete:</h4>
+                      <p>{selectedShippingService} - R$ {shippingPrice.toFixed(2)} ({shippingDeliveryTime} dias úteis)</p>
+
+                      <h4 className="font-semibold mt-4">Método de Pagamento:</h4>
+                      <p>
+                        {paymentMethod === 'CREDIT_CARD' ? 'Cartão de Crédito' : 
+                         paymentMethod === 'PIX' ? 'PIX' : 
+                         paymentMethod === 'BOLETO' ? 'Boleto Bancário' : 'Não selecionado'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-6">
+                  {currentStep > 1 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={prevStep}
+                      className="border-gray-200 hover:bg-gray-50 font-montserrat"
+                    >
+                      Voltar
+                    </Button>
+                  )}
+                  
+                  {currentStep < steps.length ? (
+                    <Button
+                      type="button"
+                      onClick={nextStep}
+                      className="ml-auto bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white font-montserrat"
+                    >
+                      Continuar
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={handlePlaceOrder}
+                      disabled={isPlacingOrder}
+                      className="ml-auto bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white px-8 py-3 font-montserrat"
+                    >
+                      {isPlacingOrder ? 'Processando...' : 'Finalizar Pedido'}
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Resumo do Pedido */}
           <div>
             <Card className="shadow-xl border-0 sticky top-6 bg-white">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-gray-900 font-playfair"> {/* Aplicado font-playfair */}
+                <CardTitle className="flex items-center gap-2 text-gray-900 font-playfair">
                   <ShoppingBag className="h-5 w-5" />
-                  Resumo do Pedido ({items.length} {items.length === 1 ? 'item' : 'itens'})
+                  Resumo do Pedido ({cartItems.length} {cartItems.length === 1 ? 'item' : 'itens'})
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Lista de produtos */}
                 <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {items.map((item) => (
+                  {cartItems.map((item) => (
                     <div key={item.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
                       <img
                         src={item.product.imageUrl}
@@ -409,16 +425,16 @@ export default function Checkout() {
                         className="w-14 h-14 object-cover rounded-lg bg-white shadow-sm"
                       />
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-sm text-gray-900 line-clamp-1 font-playfair"> {/* Aplicado font-playfair */}
+                        <h4 className="font-semibold text-sm text-gray-900 line-clamp-1 font-playfair">
                           {item.product.name}
                         </h4>
-                        <p className="text-xs text-gray-500 mt-1 font-montserrat"> {/* Aplicado font-montserrat */}
+                        <p className="text-xs text-gray-500 mt-1 font-montserrat">
                           {item.size && `Tamanho: ${item.size}`}
                           {item.color && ` • Cor: ${item.color}`}
                         </p>
                         <div className="flex items-center justify-between mt-2">
-                          <span className="text-xs text-gray-600 font-montserrat">Qtd: {item.quantity}</span> {/* Aplicado font-montserrat */}
-                          <span className="text-sm font-bold text-gray-900 font-montserrat"> {/* Aplicado font-montserrat */}
+                          <span className="text-xs text-gray-600 font-montserrat">Qtd: {item.quantity}</span>
+                          <span className="text-sm font-bold text-gray-900 font-montserrat">
                             R$ {(item.product.price * item.quantity).toFixed(2)}
                           </span>
                         </div>
@@ -429,48 +445,25 @@ export default function Checkout() {
 
                 <Separator />
 
-                <div className="space-y-3 font-montserrat"> {/* Aplicado font-montserrat */}
+                <div className="space-y-3 font-montserrat">
                   <div className="flex justify-between text-sm text-gray-600">
                     <span>Subtotal</span>
-                    <span>R$ {total.toFixed(2)}</span>
+                    <span>R$ {cartTotal.toFixed(2).replace('.', ',')}</span>
                   </div>
                   <div className="flex justify-between text-sm text-gray-600">
                     <span>Frete</span>
                     <span className={shippingPrice > 0 ? 'text-gray-900 font-semibold' : 'text-gray-500'}>
-                      {shippingPrice > 0 ? `R$ ${shippingPrice.toFixed(2)}` : 'Selecione opção'}
+                      {shippingPrice > 0 ? `R$ ${shippingPrice.toFixed(2).replace('.', ',')}` : 'Selecione opção'}
                     </span>
                   </div>
-                  
-                  {/* Calculadora de frete integrada */}
-                  <FrontendShippingCalculator
-                    items={items.map(item => ({
-                      id: item.id.toString(),
-                      product: {
-                        id: item.product.id.toString(),
-                        name: item.product.name,
-                        price: item.product.price,
-                        weight: item.product.weight || 0.3,
-                        dimensions: item.product.dimensions || { length: 20, width: 15, height: 5 }
-                      },
-                      quantity: item.quantity
-                    }))}
-                    zipCode={formData.zipCode}
-                    onZipCodeChange={(zipCode) => setFormData({...formData, zipCode })}
-                    onShippingSelect={(price, service, deliveryTime) => {
-                      setShippingPrice(price);
-                      setSelectedShippingService(service);
-                      setShippingDeliveryTime(deliveryTime);
-                    }}
-                    selectedService={selectedShippingService}
-                  />
                 </div>
                 
                 <Separator className="bg-gray-300" />
                 
-                <div className="flex justify-between items-center font-montserrat"> {/* Aplicado font-montserrat */}
+                <div className="flex justify-between items-center font-montserrat">
                   <span className="text-lg font-bold text-gray-900">Total</span>
                   <span className="text-2xl font-bold text-gray-900">
-                    R$ {(total + shippingPrice).toFixed(2)}
+                    R$ {(cartTotal + shippingPrice).toFixed(2).replace('.', ',')}
                   </span>
                 </div>
               </CardContent>

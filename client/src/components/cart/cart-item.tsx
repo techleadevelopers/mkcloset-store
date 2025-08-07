@@ -1,29 +1,24 @@
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/hooks/use-cart';
-import { type MockProduct } from '@/lib/mock-data';
+import { CartItem } from '@/types/backend'; // Importa a interface real do backend
 
 interface CartItemProps {
-  item: {
-    id: number;
-    productId: number;
-    sessionId: string;
-    quantity: number;
-    size?: string;
-    color?: string;
-    product: MockProduct;
-  };
+  item: CartItem;
 }
 
 export default function CartItemComponent({ item }: CartItemProps) {
   const { updateQuantity, removeFromCart } = useCart();
 
   const handleDecrease = () => {
-    updateQuantity(item.id, (item.quantity || 1) - 1);
+    // Garante que a quantidade não seja menor que 1
+    if (item.quantity > 1) {
+      updateQuantity(item.id, item.quantity - 1);
+    }
   };
 
   const handleIncrease = () => {
-    updateQuantity(item.id, (item.quantity || 1) + 1);
+    updateQuantity(item.id, item.quantity + 1);
   };
 
   const handleRemove = () => {

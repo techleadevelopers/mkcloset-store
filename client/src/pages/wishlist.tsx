@@ -8,28 +8,41 @@ import { useWishlist } from '@/hooks/use-wishlist';
 import { useCart } from '@/hooks/use-cart';
 import { useToast } from '@/hooks/use-toast';
 import { useLocation } from 'wouter';
+import { Product } from '@/types/backend';
+import { Skeleton } from '@/components/ui/skeleton'; // Importação adicionada
 
 export default function Wishlist() {
   const [, setLocation] = useLocation();
-  const { items, removeFromWishlist } = useWishlist();
+  const { items, removeFromWishlist, isLoading: isLoadingWishlist } = useWishlist();
   const { addToCart } = useCart();
   const { toast } = useToast();
 
-  const handleAddToCart = (productId: number) => {
-    addToCart(productId);
+  const handleAddToCart = (product: Product) => {
+    addToCart(product.id);
     toast({
       title: "Produto adicionado",
-      description: "Item adicionado ao carrinho com sucesso!",
+      description: `${product.name} adicionado ao carrinho!`,
     });
   };
 
-  const handleRemoveFromWishlist = (productId: number) => {
+  const handleRemoveFromWishlist = (productId: string) => {
     removeFromWishlist(productId);
-    toast({
-      title: "Removido da wishlist",
-      description: "Item removido da sua lista de desejos.",
-    });
   };
+
+  if (isLoadingWishlist) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+        <Header />
+        <div className="container mx-auto px-4 py-16 text-center">
+          <Skeleton className="w-24 h-24 rounded-full mx-auto mb-6" />
+          <Skeleton className="h-8 w-1/2 mx-auto mb-4" />
+          <Skeleton className="h-4 w-3/4 mx-auto mb-8" />
+          <Skeleton className="h-12 w-48 mx-auto" />
+        </div>
+        <Footer />
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -93,7 +106,7 @@ export default function Wishlist() {
                     <h3 className="font-semibold text-gray-800 line-clamp-2">
                       {item.product.name}
                     </h3>
-                    <p className="text-sm text-gray-600">{item.product.category}</p>
+                    <p className="text-sm text-gray-600">{item.product.category?.name}</p>
                   </div>
                   
                   <div className="flex items-center justify-between">
@@ -111,7 +124,7 @@ export default function Wishlist() {
 
                   <div className="flex space-x-2">
                     <Button
-                      onClick={() => handleAddToCart(item.productId)}
+                      onClick={() => handleAddToCart(item.product)}
                       className="flex-1 bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white"
                       size="sm"
                     >

@@ -1,3 +1,5 @@
+// pages/login.tsx
+
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,40 +11,45 @@ import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/layout/header';
 import Footer from '@/components/layout/footer';
 import { useLocation } from 'wouter';
+import { useMutation } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import { AuthResponse } from '@/types/backend'; // Importa a interface de resposta de autenticação
 
 export default function Login() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    try {
-      // Simulate login process
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
+  const loginMutation = useMutation<AuthResponse, Error, typeof formData>({
+    mutationFn: async (credentials) => {
+      const res = await apiRequest('POST', '/auth/login', credentials);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      localStorage.setItem('access_token', data.access_token);
+      localStorage.setItem('user_data', JSON.stringify(data.user)); // Armazena dados básicos do usuário
       toast({
         title: "Login realizado!",
-        description: "Bem-vinda de volta!",
+        description: `Bem-vindo(a) de volta, ${data.user.name || data.user.email}!`,
       });
-      
-      setLocation('/');
-    } catch (error) {
+      setLocation('/'); // Redireciona para a home
+    },
+    onError: (error) => {
       toast({
         title: "Erro no login",
-        description: "Verifique suas credenciais e tente novamente",
+        description: error.message || "Verifique suas credenciais e tente novamente.",
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
-    }
+    },
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    loginMutation.mutate(formData);
   };
 
   const handleSocialLogin = (provider: string) => {
@@ -118,10 +125,10 @@ export default function Login() {
 
                 <Button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={loginMutation.isPending}
                   className="w-full bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white font-semibold py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300"
                 >
-                  {isLoading ? 'Entrando...' : 'Entrar'}
+                  {loginMutation.isPending ? 'Entrando...' : 'Entrar'}
                 </Button>
               </form>
 

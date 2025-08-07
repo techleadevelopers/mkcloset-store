@@ -1,3 +1,5 @@
+// pages/product-detail.tsx
+
 import { useState, useEffect } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { Heart, ShoppingBag, Star, Truck, Shield, RotateCcw, ArrowLeft, Plus, Minus, Check, Loader2 } from 'lucide-react';
@@ -15,58 +17,74 @@ import CartNotification from '@/components/ui/cart-notification';
 import { useCart } from '@/hooks/use-cart';
 import { useWishlist } from '@/hooks/use-wishlist';
 import { useToast } from '@/hooks/use-toast';
-import { type MockProduct, mockProducts, getRelatedProducts } from '@/lib/mock-data';
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import { Product } from '@/types/backend'; // Importa a interface Product do backend
 import { cn } from '@/lib/utils';
 
 export default function ProductDetail() {
   const [, params] = useRoute('/product/:id');
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const productId = params?.id ? parseInt(params.id) : 0;
-  
-  const [product, setProduct] = useState<MockProduct | null>(null);
-  const [relatedProducts, setRelatedProducts] = useState<MockProduct[]>([]);
+  const productId = params?.id; // ID agora é string
+
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
 
   const { addToCart, items } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
 
-  const isInCart = items.some(item => item.productId === productId);
+  // Query para buscar o produto principal
+  const { data: product, isLoading: isLoadingProduct, isError: isErrorProduct } = useQuery<Product>({
+    queryKey: ['product', productId],
+    queryFn: async () => {
+      if (!productId) throw new Error("ID do produto não fornecido.");
+      const res = await apiRequest('GET', `/products/${productId}`);
+      return res.json();
+    },
+    enabled: !!productId, // Só executa a query se productId existir
+    staleTime: 1000 * 60 * 5, // 5 minutos de cache
+  });
+
+  // Query para buscar produtos relacionados (pela mesma categoria)
+  const { data: relatedProducts, isLoading: isLoadingRelatedProducts } = useQuery<Product[]>({
+    queryKey: ['relatedProducts', product?.categoryId, product?.id],
+    queryFn: async () => {
+      if (!product?.categoryId) return [];
+      const res = await apiRequest('GET', `/products?categoryId=${product.categoryId}`);
+      // Filtra o próprio produto e limita a 4
+      return res.json().then((prods: Product[]) => prods.filter(p => p.id !== product.id).slice(0, 4));
+    },
+    enabled: !!product?.categoryId, // Só executa se o produto principal e sua categoria existirem
+    staleTime: 1000 * 60 * 5,
+  });
 
   useEffect(() => {
-    const loadProductData = async () => {
-      setIsLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simular loading
-      
-      const foundProduct = mockProducts.find(p => p.id === productId);
-      if (foundProduct) {
-        setProduct(foundProduct);
-        const related = getRelatedProducts(productId, 4);
-        setRelatedProducts(related);
-        
-        // Definir tamanho e cor padrão se disponíveis
-        if (foundProduct.sizes.length > 0) setSelectedSize(foundProduct.sizes[0]);
-        if (foundProduct.colors.length > 0) setSelectedColor(foundProduct.colors[0]);
-      }
-      setIsLoading(false);
-    };
-
-    if (productId > 0) {
-      loadProductData();
+    if (product) {
+      // Definir tamanho e cor padrão se disponíveis
+      if (product.sizes.length > 0 && !selectedSize) setSelectedSize(product.sizes[0]);
+      if (product.colors.length > 0 && !selectedColor) setSelectedColor(product.colors[0]);
     }
-  }, [productId]);
+  }, [product, selectedSize, selectedColor]);
+
+  const isInCart = items.some(item => item.productId === productId);
+  const isInWish = product ? isInWishlist(product.id) : false;
 
   const handleAddToCart = async () => {
     if (!product) return;
 
-    setIsAddingToCart(true);
-    setJustAdded(false);
+    // Adicionar validação de seleção de tamanho/cor se obrigatório
+    if (product.sizes.length > 0 && !selectedSize) {
+      toast({ title: "Erro", description: "Por favor, selecione um tamanho.", variant: "destructive" });
+      return;
+    }
+    if (product.colors.length > 0 && !selectedColor) {
+      toast({ title: "Erro", description: "Por favor, selecione uma cor.", variant: "destructive" });
+      return;
+    }
 
     try {
       await addToCart(product.id, selectedSize, selectedColor, quantity);
@@ -79,18 +97,15 @@ export default function ProductDetail() {
         duration: 3000,
       });
 
-      // Reset após 3 segundos
       setTimeout(() => {
         setJustAdded(false);
       }, 3000);
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Erro",
-        description: "Falha ao adicionar produto ao carrinho",
+        description: error.message || "Falha ao adicionar produto ao carrinho",
         variant: "destructive",
       });
-    } finally {
-      setIsAddingToCart(false);
     }
   };
 
@@ -99,7 +114,7 @@ export default function ProductDetail() {
     toggleWishlist(product.id);
   };
 
-  if (isLoading) {
+  if (isLoadingProduct) {
     return (
       <div className="min-h-screen bg-white">
         <Header />
@@ -126,14 +141,14 @@ export default function ProductDetail() {
     );
   }
 
-  if (!product) {
+  if (isErrorProduct || !product) {
     return (
       <div className="min-h-screen bg-white">
         <Header />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Produto não encontrado</h1>
           <Button 
-            onClick={() => setLocation('/')}
+            onClick={() => setLocation('/products')}
             className="bg-gray-900 hover:bg-black text-white rounded-xl"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -146,7 +161,6 @@ export default function ProductDetail() {
   }
 
   const isOnSale = product.originalPrice && product.originalPrice > product.price;
-  const isInWish = isInWishlist(product.id);
   const discount = isOnSale ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) : 0;
 
   return (
@@ -197,6 +211,16 @@ export default function ProductDetail() {
                   </Badge>
                 )}
               </div>
+              {/* Miniaturas de imagem */}
+              {product.images && product.images.length > 0 && (
+                <div className="grid grid-cols-4 gap-2">
+                  {product.images.map((img, index) => (
+                    <div key={index} className="aspect-square bg-gray-100 rounded-lg overflow-hidden cursor-pointer">
+                      <img src={img} alt={`${product.name} - ${index + 1}`} className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Product Info */}
@@ -217,7 +241,7 @@ export default function ProductDetail() {
                   )}
                 </div>
 
-                {/* Rating */}
+                {/* Rating (mockado) */}
                 <div className="flex items-center space-x-1 mb-6">
                   {[...Array(5)].map((_, i) => (
                     <Star
@@ -230,7 +254,7 @@ export default function ProductDetail() {
               </div>
 
               {/* Size Selection */}
-              {product.sizes.length > 0 && (
+              {product.sizes && product.sizes.length > 0 && (
                 <div>
                   <h3 className="font-semibold mb-3">Tamanho</h3>
                   <div className="flex space-x-2">
@@ -255,7 +279,7 @@ export default function ProductDetail() {
               )}
 
               {/* Color Selection */}
-              {product.colors.length > 0 && (
+              {product.colors && product.colors.length > 0 && (
                 <div>
                   <h3 className="font-semibold mb-3">Cor: {selectedColor}</h3>
                   <div className="flex space-x-3">
@@ -277,10 +301,12 @@ export default function ProductDetail() {
                             color.toLowerCase() === 'azul' ? '#3b82f6' :
                             color.toLowerCase() === 'rosa' ? '#ec4899' :
                             color.toLowerCase() === 'verde' ? '#10b981' :
+                            color.toLowerCase() === 'bordo' ? '#800020' : // Adicionado Bordo
+                            color.toLowerCase() === 'off white' ? '#f5f5dc' : // Adicionado Off White
                             color.toLowerCase() === 'vinho' ? '#7c2d12' :
                             color.toLowerCase() === 'camel' ? '#d2691e' :
                             color.toLowerCase() === 'bege' ? '#f5f5dc' :
-                            '#6b7280'
+                            '#6b7280' // Cor padrão
                         }}
                         title={color}
                       />
@@ -321,7 +347,7 @@ export default function ProductDetail() {
                 <div className="flex space-x-4">
                   <Button
                     onClick={handleAddToCart}
-                    disabled={isAddingToCart || justAdded}
+                    disabled={justAdded || quantity > product.stock || quantity <= 0}
                     className={cn(
                       "flex-1 py-4 text-lg font-semibold rounded-xl transition-all duration-500",
                       justAdded 
@@ -331,16 +357,14 @@ export default function ProductDetail() {
                         : 'bg-gray-900 hover:bg-black text-white hover:scale-105'
                     )}
                   >
-                    {isAddingToCart ? (
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    ) : justAdded ? (
+                    {justAdded ? (
                       <Check className="w-5 h-5 mr-2 animate-bounce" />
                     ) : isInCart ? (
                       <Check className="w-5 h-5 mr-2" />
                     ) : (
                       <ShoppingBag className="w-5 h-5 mr-2" />
                     )}
-                    {isAddingToCart ? 'Adicionando...' : justAdded ? 'Adicionado!' : isInCart ? 'No Carrinho' : 'Adicionar ao Carrinho'}
+                    {justAdded ? 'Adicionado!' : isInCart ? 'No Carrinho' : 'Adicionar ao Carrinho'}
                   </Button>
 
                   <Button
@@ -383,7 +407,7 @@ export default function ProductDetail() {
           </div>
 
           {/* Related Products */}
-          {relatedProducts.length > 0 && (
+          {relatedProducts && relatedProducts.length > 0 && (
             <div className="mt-16">
               <h2 className="text-2xl font-bold text-gray-900 mb-8">Produtos Relacionados</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

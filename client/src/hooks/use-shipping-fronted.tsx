@@ -1,5 +1,8 @@
+// hooks/use-shipping-fronted.tsx
+
 import { useState, useCallback } from 'react';
-import { calculateShipping, validateZipCode, formatZipCode, ShippingResult } from '@/lib/shipping-calculator';
+import { apiRequest } from '@/lib/queryClient';
+import { ShippingResult, ShippingOption, ProductForShipping, CartItemForShipping } from '@/types/backend'; // Importa as interfaces do backend
 
 export function useShippingFrontend() {
   const [shippingData, setShippingData] = useState<ShippingResult | null>(null);
@@ -8,24 +11,24 @@ export function useShippingFrontend() {
 
   const calculateShippingRates = useCallback(async (params: {
     zipCode: string;
-    weight: number;
-    value: number;
-    length?: number;
-    width?: number;
-    height?: number;
+    items: CartItemForShipping[]; // Espera os itens do carrinho no formato do backend
   }) => {
     setIsLoading(true);
     setError(null);
     
     try {
-      if (!validateZipCode(params.zipCode)) {
+      if (!params.zipCode || params.zipCode.replace(/\D/g, '').length !== 8) {
         throw new Error('CEP deve ter 8 dígitos');
       }
 
-      const result = await calculateShipping(params);
+      const result: ShippingResult = await apiRequest('POST', '/shipping/calculate', {
+        zipCode: params.zipCode,
+        items: params.items,
+      }).then(res => res.json());
+
       setShippingData(result);
       return result;
-    } catch (err) {
+    } catch (err: any) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao calcular frete';
       setError(errorMessage);
       throw err;
@@ -39,8 +42,10 @@ export function useShippingFrontend() {
     setError(null);
   }, []);
 
-  const formatZip = useCallback((zipCode: string) => {
-    return formatZipCode(zipCode);
+  const formatZip = useCallback((zipCode: string): string => {
+    const cleanZip = zipCode.replace(/\D/g, '');
+    if (cleanZip.length <= 5) return cleanZip;
+    return `${cleanZip.slice(0, 5)}-${cleanZip.slice(5, 8)}`;
   }, []);
 
   return {

@@ -1,7 +1,7 @@
-// src/pages/products.tsx (ou o caminho exato do seu Products.tsx)
+// src/pages/products.tsx
 
 import { useState, useEffect } from 'react';
-import { useLocation } from 'wouter';
+import { useLocation, useRoute } from 'wouter';
 import { Filter, Grid, List } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,65 +11,65 @@ import Footer from '@/components/layout/footer';
 import ProductCard from '@/components/product/product-card';
 import ShoppingCart from '@/components/cart/shopping-cart';
 import WhatsAppButton from '@/components/ui/whatsapp-button';
-import { mockProducts, mockCategories, getFilteredProducts, getCategoryBySlug, type MockProduct, type MockCategory } from '@/lib/mock-data'; // Usando '@/lib/mock-data' conforme seu import
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import { Product, Category } from '@/types/backend'; // Importa as interfaces do backend
 
 export default function Products() {
   const [location] = useLocation();
-  const [sortBy, setSortBy] = useState('default'); // <--- MUDANÇA AQUI: Mudei o valor inicial para 'default'
+  const [sortBy, setSortBy] = useState('default');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [products, setProducts] = useState<MockProduct[]>([]);
-  const [categories, setCategories] = useState<MockCategory[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
   // Parse URL parameters
+  const [, params] = useRoute('/products/:category');
+  const categorySlug = params?.category;
   const urlParams = new URLSearchParams(location.split('?')[1] || '');
-  const categorySlug = location.split('/products/')[1]?.split('?')[0];
   const searchQuery = urlParams.get('search');
   const featured = urlParams.get('featured');
 
-  const category = getCategoryBySlug(categorySlug || '');
+  // Query para buscar categorias
+  const { data: categories, isLoading: isLoadingCategories } = useQuery<Category[]>({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/categories');
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 60, // 1 hora de cache
+  });
 
-  useEffect(() => {
-    const loadProducts = async () => {
-      setIsLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 300)); // Simular delay
-      
-      const filters: any = {};
-      if (category?.id) filters.category = category.id;
-      if (searchQuery) filters.search = searchQuery;
-      if (featured) filters.featured = true;
-      
-      const filteredProducts = getFilteredProducts(filters);
-      setProducts(filteredProducts); // <-- Esta lista vem na ordem do mockProducts.ts
-      setCategories(mockCategories);
-      setIsLoading(false);
-    };
+  const selectedCategory = categories?.find(cat => cat.slug === categorySlug);
 
-    loadProducts();
-  }, [category, searchQuery, featured]);
-
-  // Lógica de ordenação: Adicionamos um caso para 'default'
-  const sortedProducts = [...products].sort((a, b) => {
-    switch (sortBy) {
-      case 'default': // <--- MUDANÇA AQUI: Novo caso para ordem padrão
-        return 0; // Retorna 0 para não alterar a ordem, mantendo a ordem original do array 'products'
-      case 'price-low':
-        return a.price - b.price;
-      case 'price-high':
-        return b.price - a.price;
-      case 'name':
-        return a.name.localeCompare(b.name);
-      default:
-        return 0; // Fallback para ordem padrão se sortBy for inválido
-    }
+  // Query para buscar produtos
+  const { data: products, isLoading: isLoadingProducts } = useQuery<Product[]>({
+    queryKey: ['products', selectedCategory?.id, searchQuery, featured, sortBy], // Query key dinâmica para re-fetch
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedCategory?.id) {
+        params.append('categoryId', selectedCategory.id);
+      }
+      if (searchQuery) {
+        params.append('search', searchQuery);
+      }
+      if (featured) {
+        params.append('isFeatured', 'true'); // Backend espera boolean como string
+      }
+      if (sortBy && sortBy !== 'default') {
+        params.append('sortBy', sortBy);
+      }
+      const res = await apiRequest('GET', `/products?${params.toString()}`);
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 2, // 2 minutos de cache para produtos
   });
 
   const getPageTitle = () => {
     if (searchQuery) return `Resultados para "${searchQuery}"`;
     if (featured) return 'Produtos em Destaque';
-    if (category) return category.name;
+    if (selectedCategory) return selectedCategory.name;
     return 'Todos os Produtos';
   };
+
+  const totalProducts = products?.length || 0;
 
   return (
     <div className="min-h-screen bg-white">
@@ -80,7 +80,7 @@ export default function Products() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">{getPageTitle()}</h1>
           <p className="text-gray-600">
-            {isLoading ? 'Carregando...' : `${products.length} produto${products.length !== 1 ? 's' : ''} encontrado${products.length !== 1 ? 's' : ''}`}
+            {isLoadingProducts ? 'Carregando...' : `${totalProducts} produto${totalProducts !== 1 ? 's' : ''} encontrado${totalProducts !== 1 ? 's' : ''}`}
           </p>
         </div>
 
@@ -99,7 +99,7 @@ export default function Products() {
                 <SelectValue placeholder="Ordenar por" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="default">Ordem Padrão</SelectItem> {/* <--- MUDANÇA AQUI: Nova opção */}
+                <SelectItem value="default">Ordem Padrão</SelectItem>
                 <SelectItem value="name">Nome A-Z</SelectItem>
                 <SelectItem value="price-low">Menor preço</SelectItem>
                 <SelectItem value="price-high">Maior preço</SelectItem>
@@ -128,8 +128,8 @@ export default function Products() {
         </div>
 
         {/* Products Grid */}
-        {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"> {/* APENAS AQUI: Mudado lg:grid-cols-4 para lg:grid-cols-3 */}
+        {isLoadingProducts ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {[...Array(8)].map((_, i) => (
               <div key={i} className="space-y-4">
                 <Skeleton className="w-full aspect-[3/4] rounded-lg" />
@@ -139,7 +139,7 @@ export default function Products() {
               </div>
             ))}
           </div>
-        ) : products.length === 0 ? (
+        ) : totalProducts === 0 ? (
           <div className="text-center py-16">
             <div className="text-gray-400 mb-4">
               <svg className="mx-auto h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -160,10 +160,10 @@ export default function Products() {
         ) : (
           <div className={
             viewMode === 'grid' 
-              ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8" // <<-- APENAS AQUI: Mudado lg:grid-cols-4 para lg:grid-cols-3
+              ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8"
               : "space-y-6"
           }>
-            {sortedProducts.map((product) => (
+            {products?.map((product) => (
               <ProductCard 
                 key={product.id} 
                 product={product}

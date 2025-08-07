@@ -1,4 +1,4 @@
-// src/pages/home.tsx (ou o caminho exato do seu Home.tsx)
+// src/pages/home.tsx
 
 import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
@@ -10,13 +10,12 @@ import Footer from '@/components/layout/footer';
 import ProductCard from '@/components/product/product-card';
 import ShoppingCart from '@/components/cart/shopping-cart';
 import WhatsAppButton from '@/components/ui/whatsapp-button';
-import { mockProducts, mockCategories, getFilteredProducts, type MockProduct, type MockCategory } from '@/lib/mock-data';
-import InstagramFeedSection from '@/components/InstagramFeedSection'; // Importa a nova seção do Instagram
+import InstagramFeedSection from '@/components/InstagramFeedSection';
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import { Product, Category } from '@/types/backend'; // Importa as interfaces do backend
 
 export default function Home() {
-  const [featuredProducts, setFeaturedProducts] = useState<MockProduct[]>([]);
-  const [categories, setCategories] = useState<MockCategory[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   // Array de imagens atualizado para o carrossel da Hero Section
@@ -36,52 +35,47 @@ export default function Home() {
     "/images/saia-glamour.jpg",   // Saia Glamour
   ];
 
+  // Query para buscar produtos em destaque
+  const { data: featuredProducts, isLoading: isLoadingFeaturedProducts } = useQuery<Product[]>({
+    queryKey: ['featuredProducts'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/products/featured');
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 5, // 5 minutos de cache
+  });
+
+  // Query para buscar categorias
+  const { data: categories, isLoading: isLoadingCategories } = useQuery<Category[]>({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/categories');
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 60, // 1 hora de cache
+  });
+
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simular delay de rede
-
-      const featured = getFilteredProducts({ featured: true });
-      setFeaturedProducts(featured);
-
-      // Lógica para alinhar as imagens das categorias
-      const updatedCategories = mockCategories.map(category => {
-        let newImageUrl = category.imageUrl; // Mantém a imagem existente como padrão
-
-        switch (category.name) {
-          case 'Vestido': 
-            newImageUrl = '/images/tras.jpg'; 
-            break;
-          case 'Blusas': 
-            newImageUrl = '/images/top-julia.jpg'; 
-            break;
-          case 'Saia': 
-            newImageUrl = '/images/saia-julia.jpg'; 
-            break;
-          case 'Calças':
-            newImageUrl = '/images/olivia-frente.jpg'; 
-            break;
-          case 'Jaqueta': 
-            newImageUrl = '/images/glamour-lado.jpg';
-            break;
-          default:
-            break;
-        }
-        return { ...category, imageUrl: newImageUrl };
-      });
-
-      setCategories(updatedCategories); 
-      setIsLoading(false);
-    };
-
-    loadData();
-
     const interval = setInterval(() => {
       setCurrentImageIndex((prevIndex) => (prevIndex + 1) % images.length);
     }, 3000);
 
     return () => clearInterval(interval);
   }, [images.length]);
+
+  // Lógica para alinhar as imagens das categorias (mantida no frontend por enquanto)
+  const getCategoryImageUrl = (categoryName: string) => {
+    switch (categoryName) {
+      case 'Vestido': return '/images/tras.jpg';
+      case 'Blusas': return '/images/top-julia.jpg';
+      case 'Saia': return '/images/saia-julia.jpg';
+      case 'Calças': return '/images/olivia-frente.jpg';
+      case 'Jaqueta': return '/images/glamour-lado.jpg';
+      default: return '/images/default-category.jpg'; // Imagem padrão se não houver correspondência
+    }
+  };
+
+  const isLoading = isLoadingFeaturedProducts || isLoadingCategories;
 
   return (
     <div className="min-h-screen bg-white">
@@ -149,7 +143,7 @@ export default function Home() {
           </div>
 
           <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-4 sm:gap-6">
-            {isLoading ? (
+            {isLoadingCategories ? (
               [...Array(6)].map((_, i) => (
                 <div key={i} className="text-center">
                   <div className="mb-3 sm:mb-4">
@@ -159,13 +153,13 @@ export default function Home() {
                 </div>
               ))
             ) : (
-              categories.slice(0, 6).map((category) => (
+              categories?.slice(0, 6).map((category) => (
                 <Link key={category.id} href={`/products/${category.slug}`}>
                   <div className="group text-center cursor-pointer">
                     <div className="mb-3 sm:mb-4 relative">
                       <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto rounded-full overflow-hidden bg-gray-100 group-hover:shadow-lg transition-all duration-300">
                         <img
-                          src={category.imageUrl}
+                          src={category.imageUrl || getCategoryImageUrl(category.name)} // Usa URL do backend ou a local
                           alt={category.name}
                           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                         />
@@ -202,7 +196,7 @@ export default function Home() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
-            {isLoading ? (
+            {isLoadingFeaturedProducts ? (
               [...Array(4)].map((_, i) => (
                 <div key={i} className="bg-white rounded-2xl shadow-sm overflow-hidden">
                   <Skeleton className="w-full aspect-[3/4]" />
@@ -217,7 +211,7 @@ export default function Home() {
                 </div>
               ))
             ) : (
-              featuredProducts.slice(0, 4).map((product) => (
+              featuredProducts?.slice(0, 4).map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))
             )}
@@ -232,45 +226,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      {/* Promo Banner - SEÇÃO COMENTADA E REMOVIDA DA RENDERIZAÇÃO */}
-      {/*
-      <section className="py-12 sm:py-16 lg:py-20 bg-gradient-to-r from-gray-800 to-black text-white">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12 items-center">
-            <div className="text-center lg:text-left px-2 sm:px-0">
-              <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-4 lg:mb-6 leading-tight">
-                Frete Grátis em Compras Acima de R$ 199
-              </h3>
-              <p className="text-sm sm:text-lg lg:text-xl mb-6 sm:mb-8 opacity-90 leading-relaxed px-2 sm:px-0">
-                Aproveite nossa promoção especial e receba seus produtos favoritos sem custo adicional de entrega.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start">
-                <Link href="/products">
-                  <Button variant="secondary" className="bg-white text-gray-900 hover:bg-gray-100 px-6 py-2 sm:px-8 sm:py-3 rounded-lg sm:rounded-xl text-sm sm:text-base w-full sm:w-auto">
-                    Comprar Agora
-                  </Button>
-                </Link>
-                <Button variant="outline" className="border-white text-white hover:bg-white hover:text-gray-900 px-6 py-2 sm:px-8 sm:py-3 rounded-lg sm:rounded-xl text-sm sm:text-base w-full sm:w-auto">
-                  Ver Condições
-                </Button>
-              </div>
-            </div>
-            <div className="text-center mt-8 lg:mt-0">
-              <div className="bg-white bg-opacity-20 rounded-xl sm:rounded-2xl p-4 sm:p-6 lg:p-8 backdrop-blur-sm mx-4 sm:mx-0">
-                <Truck className="h-12 w-12 sm:h-14 sm:w-14 lg:h-16 lg:w-16 mx-auto mb-2 sm:mb-3 lg:mb-4" />
-                <h4 className="text-lg sm:text-xl lg:text-2xl font-bold mb-1 sm:mb-2 leading-tight">
-                  Entrega Rápida
-                </h4>
-                <p className="opacity-90 text-sm sm:text-base">
-                  Receba em até 2 dias úteis
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      */}
 
       {/* Trust Badges - Enhanced */}
       <section className="py-12 sm:py-16 lg:py-20 bg-gradient-to-b from-gray-50 to-white">

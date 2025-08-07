@@ -5,27 +5,107 @@ import { CheckCircle, Package, Truck, CreditCard, Download, ArrowRight } from 'l
 import Header from '@/components/layout/header';
 import Footer from '@/components/layout/footer';
 import { useLocation } from 'wouter';
+import { useQuery, QueryKey } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import { Order, OrderStatus } from '@/types/backend';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function OrderSuccess() {
   const [, setLocation] = useLocation();
-  const [orderNumber] = useState(() => Math.floor(Math.random() * 900000) + 100000);
-  const [estimatedDelivery] = useState(() => {
-    const date = new Date();
-    date.setDate(date.getDate() + 5);
-    return date.toLocaleDateString('pt-BR', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
+  const queryParams = new URLSearchParams(window.location.search);
+  const orderId = queryParams.get('orderId');
+
+  const { data: order, isLoading: isLoadingOrder, isError: isErrorOrder } = useQuery<Order, Error>({
+    queryKey: ['order', orderId],
+    queryFn: async () => {
+      if (!orderId) {
+        throw new Error("ID do pedido não fornecido.");
+      }
+      try {
+        const res = await apiRequest('GET', `/orders/${orderId}`);
+        if (!res.ok) {
+            throw new Error(`Erro ao buscar pedido: ${res.statusText}`);
+        }
+        return res.json();
+      } catch (err: unknown) {
+        console.error("Erro ao carregar detalhes do pedido:", err);
+        throw new Error("Não foi possível carregar os detalhes do pedido.");
+      }
+    },
+    enabled: !!orderId && !!localStorage.getItem('access_token'),
+    staleTime: Infinity,
   });
 
-  const orderSteps = [
-    { icon: CheckCircle, title: 'Pedido confirmado', completed: true },
-    { icon: CreditCard, title: 'Pagamento processado', completed: true },
-    { icon: Package, title: 'Em preparação', completed: false },
-    { icon: Truck, title: 'Enviado', completed: false },
-  ];
+  const getOrderStatusSteps = (currentStatus: OrderStatus) => {
+    const steps = [
+      { status: 'PENDING', title: 'Pedido confirmado', icon: CheckCircle },
+      { status: 'PAID', title: 'Pagamento processado', icon: CreditCard },
+      { status: 'SHIPPED', title: 'Enviado', icon: Truck },
+      { status: 'DELIVERED', title: 'Entregue', icon: Package },
+    ];
+
+    let completedIndex = -1;
+    for (let i = 0; i < steps.length; i++) {
+      if (steps[i].status === currentStatus) {
+        completedIndex = i;
+        break;
+      }
+    }
+
+    return steps.map((step, index) => ({
+      ...step,
+      completed: index <= completedIndex,
+    }));
+  };
+
+  if (isLoadingOrder) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+        <Header />
+        <div className="container mx-auto px-4 py-16">
+          <Skeleton className="w-24 h-24 rounded-full mx-auto mb-6" />
+          <Skeleton className="h-8 w-1/2 mx-auto mb-2" />
+          <Skeleton className="h-6 w-3/4 mx-auto mb-8" />
+          <Skeleton className="h-64 w-full mx-auto mb-6" />
+          <Skeleton className="h-48 w-full mx-auto mb-6" />
+          <Skeleton className="h-32 w-full mx-auto mb-8" />
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (isErrorOrder || !order) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+        <Header />
+        <div className="container mx-auto px-4 py-16 text-center">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Pedido não encontrado</h1>
+          <p className="text-gray-600 text-lg">
+            Não foi possível carregar os detalhes do seu pedido. Por favor, verifique o link ou tente novamente mais tarde.
+          </p>
+          <Button
+            onClick={() => setLocation('/orders')}
+            className="mt-8 bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white"
+          >
+            Ver Meus Pedidos
+          </Button>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  const orderSteps = getOrderStatusSteps(order.status);
+  const estimatedDeliveryDate = new Date(order.createdAt);
+  estimatedDeliveryDate.setDate(estimatedDeliveryDate.getDate() + (order.shippingService === '4014' ? 1 : 5));
+  const estimatedDelivery = estimatedDeliveryDate.toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -49,7 +129,7 @@ export default function OrderSuccess() {
           <Card className="shadow-lg border-0 mb-6">
             <CardHeader className="bg-gradient-to-r from-gray-800 to-black text-white rounded-t-lg">
               <CardTitle className="text-center">
-                Pedido #{orderNumber}
+                Pedido #{order.id.slice(-8).toUpperCase()}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-6">
@@ -57,17 +137,18 @@ export default function OrderSuccess() {
                 <div>
                   <h3 className="font-semibold text-gray-800 mb-2">Detalhes do Pedido</h3>
                   <div className="space-y-2 text-sm text-gray-600">
-                    <p><strong>Data:</strong> {new Date().toLocaleDateString('pt-BR')}</p>
+                    <p><strong>Data:</strong> {new Date(order.createdAt).toLocaleDateString('pt-BR')}</p>
                     <p><strong>Previsão de entrega:</strong> {estimatedDelivery}</p>
-                    <p><strong>Método de pagamento:</strong> PIX (5% desconto)</p>
+                    <p><strong>Método de pagamento:</strong> {order.paymentMethod === 'CREDIT_CARD' ? 'Cartão de Crédito' : order.paymentMethod === 'PIX' ? 'PIX' : order.paymentMethod}</p>
+                    <p><strong>Total:</strong> R$ {order.totalAmount.toFixed(2).replace('.', ',')}</p>
                   </div>
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-800 mb-2">Endereço de Entrega</h3>
                   <div className="text-sm text-gray-600">
-                    <p>Maria Silva</p>
-                    <p>Rua das Flores, 123</p>
-                    <p>São Paulo, SP - 01234-567</p>
+                    <p>{order.shippingAddressStreet}, {order.shippingAddressNumber}</p>
+                    <p>{order.shippingAddressComplement && `${order.shippingAddressComplement} - `}{order.shippingAddressNeighborhood}</p>
+                    <p>{order.shippingAddressCity}, {order.shippingAddressState} - {order.shippingAddressZipCode}</p>
                   </div>
                 </div>
               </div>
@@ -84,8 +165,8 @@ export default function OrderSuccess() {
                 {orderSteps.map((step, index) => (
                   <div key={index} className="flex items-center space-x-4">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      step.completed 
-                        ? 'bg-green-100 text-green-600' 
+                      step.completed
+                        ? 'bg-green-100 text-green-600'
                         : 'bg-gray-100 text-gray-400'
                     }`}>
                       <step.icon className="w-5 h-5" />

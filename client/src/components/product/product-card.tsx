@@ -1,3 +1,5 @@
+// components/product/product-card.tsx
+
 import { useState, useEffect } from 'react';
 import { Heart, Plus, Check, Loader2, Eye, Star } from 'lucide-react';
 import { Link } from 'wouter';
@@ -6,20 +8,19 @@ import { Badge } from '@/components/ui/badge';
 import CartNotification from '@/components/ui/cart-notification';
 import { useCart } from '@/hooks/use-cart';
 import { useWishlist } from '@/hooks/use-wishlist';
-import { type MockProduct } from '@/lib/mock-data';
+import { Product } from '@/types/backend'; // Importa a interface Product do backend
 
 interface ProductCardProps {
-  product: MockProduct;
+  product: Product;
   className?: string;
 }
 
 export default function ProductCard({ product, className = "" }: ProductCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
 
-  const { addToCart, items } = useCart();
+  const { addToCart, items, isLoading: isAddingToCart } = useCart(); // isAddingToCart agora vem do hook
   const { isInWishlist, toggleWishlist } = useWishlist();
 
   const inWishlist = isInWishlist(product.id);
@@ -31,11 +32,11 @@ export default function ProductCard({ product, className = "" }: ProductCardProp
     
     if (justAdded) return;
 
-    setIsAddingToCart(true);
-    setJustAdded(false);
+    // isAddingToCart já é controlado pelo hook useCart
+    // setJustAdded(false); // Removido, pois o estado de 'justAdded' é definido após o sucesso da mutação
 
     try {
-      await addToCart(product.id, undefined, undefined, 1);
+      await addToCart(product.id);
       setJustAdded(true);
       setShowNotification(true);
 
@@ -45,8 +46,6 @@ export default function ProductCard({ product, className = "" }: ProductCardProp
       }, 3000);
     } catch (error) {
       console.error('Erro ao adicionar ao carrinho:', error);
-    } finally {
-      setIsAddingToCart(false);
     }
   };
 
@@ -167,7 +166,7 @@ export default function ProductCard({ product, className = "" }: ProductCardProp
             <div className="p-5 space-y-3 cursor-pointer">
               <div className="space-y-1">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {product.category}
+                  {product.category?.name} {/* Acessa name da categoria */}
                 </p>
                 <h3 className="font-semibold text-gray-900 line-clamp-2 leading-tight hover:text-gray-700 transition-colors">
                   {product.name}
@@ -197,7 +196,7 @@ export default function ProductCard({ product, className = "" }: ProductCardProp
               </div>
 
               {/* Size indicators */}
-              {product.sizes.length > 0 && (
+              {product.sizes && product.sizes.length > 0 && (
                 <div className="flex items-center space-x-1">
                   <span className="text-xs text-gray-500">Tamanhos:</span>
                   <div className="flex space-x-1">

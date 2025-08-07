@@ -1,3 +1,5 @@
+// pages/register.tsx
+
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,11 +11,13 @@ import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/layout/header';
 import Footer from '@/components/layout/footer';
 import { useLocation } from 'wouter';
+import { useMutation } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import { User as BackendUser } from '@/types/backend'; // Importa a interface de usuário do backend
 
 export default function Register() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -23,6 +27,27 @@ export default function Register() {
     password: '',
     confirmPassword: '',
     acceptTerms: false
+  });
+
+  const registerMutation = useMutation<BackendUser, Error, Omit<typeof formData, 'confirmPassword' | 'acceptTerms'>>({
+    mutationFn: async (userData) => {
+      const res = await apiRequest('POST', '/auth/register', userData);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Conta criada com sucesso!",
+        description: "Bem-vinda(o) à MKcloset! Você já pode fazer login.",
+      });
+      setLocation('/login');
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro no cadastro",
+        description: error.message || "Ocorreu um erro ao criar sua conta. Tente novamente.",
+        variant: "destructive",
+      });
+    },
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -46,27 +71,8 @@ export default function Register() {
       return;
     }
 
-    setIsLoading(true);
-
-    try {
-      // Simulate registration process
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      toast({
-        title: "Conta criada com sucesso!",
-        description: "Bem-vinda à MKcloset! Você já pode fazer login.",
-      });
-      
-      setLocation('/login');
-    } catch (error) {
-      toast({
-        title: "Erro no cadastro",
-        description: "Ocorreu um erro ao criar sua conta. Tente novamente.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    const { name, email, phone, password } = formData;
+    registerMutation.mutate({ name, email, phone, password });
   };
 
   const handleSocialLogin = (provider: string) => {
@@ -199,10 +205,10 @@ export default function Register() {
 
                 <Button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={registerMutation.isPending}
                   className="w-full bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white font-semibold py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300"
                 >
-                  {isLoading ? 'Criando conta...' : 'Criar conta'}
+                  {registerMutation.isPending ? 'Criando conta...' : 'Criar conta'}
                 </Button>
               </form>
 

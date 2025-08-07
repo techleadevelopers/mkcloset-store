@@ -1,22 +1,46 @@
+// lib/queryClient.ts
+
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+
+// URL base do seu backend NestJS
+// IMPORTANTE: Mude para o domínio do seu backend em produção (ex: "https://api.mkcloset.com")
+const API_BASE_URL = "http://localhost:3001";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    // Tenta parsear JSON de erro do backend se disponível
+    try {
+      const errorData = JSON.parse(text);
+      throw new Error(errorData.message || res.statusText);
+    } catch {
+      throw new Error(`${res.status}: ${text}`);
+    }
   }
 }
 
+// Função auxiliar para obter o token JWT do localStorage
+function getAuthToken(): string | null {
+  return localStorage.getItem('access_token');
+}
+
+// Função para fazer requisições API com autenticação
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(url, {
+  const token = getAuthToken();
+  const headers: HeadersInit = data ? { "Content-Type": "application/json" } : {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE_URL}${url}`, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
+    credentials: "include", // Mantenha se o backend usa cookies/sessões, caso contrário pode remover
   });
 
   await throwIfResNotOk(res);
@@ -29,8 +53,15 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey[0] as string, {
-      credentials: "include",
+    const token = getAuthToken();
+    const headers: HeadersInit = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(`${API_BASE_URL}${queryKey[0] as string}`, {
+      headers,
+      credentials: "include", // Mantenha se o backend usa cookies/sessões, caso contrário pode remover
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
@@ -47,11 +78,17 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
-      retry: false,
+      staleTime: 1000 * 60 * 5, // 5 minutos de cache para queries
+      retry: (failureCount, error) => {
+        // Não tentar novamente em caso de 401 Unauthorized
+        if (error instanceof Error && error.message.includes('401')) {
+          return false;
+        }
+        return failureCount < 3; // Tentar 3 vezes
+      },
     },
     mutations: {
-      retry: false,
+      retry: false, // Mutações geralmente não devem ser retentadas automaticamente
     },
   },
 });
