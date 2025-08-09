@@ -1,3 +1,5 @@
+// components/cart/cart-item.tsx
+
 import { Minus, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/hooks/use-cart';
@@ -9,6 +11,11 @@ interface CartItemProps {
 
 export default function CartItemComponent({ item }: CartItemProps) {
   const { updateQuantity, removeFromCart } = useCart();
+
+  // --- Adicione este console.log para depuração ---
+  console.log('Dados do item do carrinho:', item);
+  // console.log('URL da imagem do produto:', item.product.imageUrl); // Linha removida
+  // -------------------------------------------------
 
   const handleDecrease = () => {
     // Garante que a quantidade não seja menor que 1
@@ -27,11 +34,15 @@ export default function CartItemComponent({ item }: CartItemProps) {
 
   const itemTotal = item.product.price * (item.quantity || 1);
 
+  // Define a URL da imagem a partir do primeiro item do array 'images' do produto.
+  // Adiciona um fallback para uma imagem de placeholder caso o array esteja vazio ou não exista.
+  const imageUrl = item.product.images?.[0] || 'https://placehold.co/600x800/e2e8f0/ffffff?text=Sem+Imagem';
+
   return (
     <div className="flex items-center space-x-4 py-4 border-b border-gray-100 last:border-b-0">
       <div className="w-16 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
         <img
-          src={item.product.imageUrl}
+          src={imageUrl} // <--- ALTERADO AQUI
           alt={item.product.name}
           className="w-full h-full object-cover"
         />

@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { Check, ShoppingBag, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUIStore } from '@/lib/store';
-import { type MockProduct } from '@/lib/mock-data';
+import { Product } from '@/types/backend'; // <--- CORRIGIDO: Importa o tipo de produto real
 
 interface CartNotificationProps {
   isVisible: boolean;
-  product: MockProduct | null;
+  product: Product | null; // <--- CORRIGIDO: Agora usa o tipo Product
   onClose: () => void;
 }
 
@@ -38,6 +38,9 @@ export default function CartNotification({ isVisible, product, onClose }: CartNo
 
   if (!isVisible || !product) return null;
 
+  // <--- CORRIGIDO AQUI: A URL agora é buscada do array 'images' do produto
+  const imageUrl = product.images?.[0] || 'https://placehold.co/600x800/e2e8f0/ffffff?text=Sem+Imagem';
+  
   return (
     <div className={`
       fixed top-4 right-4 z-50 max-w-sm w-full
@@ -72,7 +75,7 @@ export default function CartNotification({ isVisible, product, onClose }: CartNo
         <div className="p-4">
           <div className="flex space-x-3">
             <img
-              src={product.imageUrl}
+              src={imageUrl} // <--- CORRIGIDO AQUI
               alt={product.name}
               className="w-16 h-16 object-cover rounded-lg bg-gray-100"
             />
@@ -80,9 +83,12 @@ export default function CartNotification({ isVisible, product, onClose }: CartNo
               <h3 className="font-semibold text-gray-900 line-clamp-1 text-sm">
                 {product.name}
               </h3>
-              <p className="text-xs text-gray-500 mt-1">
-                {product.category}
-              </p>
+              {/* O tipo de mock não tinha category. Com o tipo real do backend, isso pode ser ajustado */}
+              {product.category && ( 
+                <p className="text-xs text-gray-500 mt-1">
+                  {product.category.name}
+                </p>
+              )}
               <p className="text-sm font-bold text-gray-900 mt-1">
                 R$ {product.price.toFixed(2)}
               </p>
@@ -121,8 +127,6 @@ export default function CartNotification({ isVisible, product, onClose }: CartNo
           />
         </div>
       </div>
-
-
     </div>
   );
 }

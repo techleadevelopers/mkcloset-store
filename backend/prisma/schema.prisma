@@ -1,4 +1,4 @@
-// prisma/schema.prisma
+// schema.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -11,13 +11,13 @@ datasource db {
 
 // Enums para status de pedido e tipos de transação
 enum OrderStatus {
-  PENDING     // Aguardando pagamento
-  PAID        // Pagamento confirmado
-  PROCESSING  // Em preparação/separação
-  SHIPPED     // Enviado
-  DELIVERED   // Entregue
-  CANCELLED   // Cancelado
-  REFUNDED    // Reembolsado
+  PENDING    // Aguardando pagamento
+  PAID       // Pagamento confirmado
+  PROCESSING // Em preparação/separação
+  SHIPPED    // Enviado
+  DELIVERED  // Entregue
+  CANCELLED  // Cancelado
+  REFUNDED   // Reembolsado
 }
 
 // NOVO: Enum para tipos de transação
@@ -28,35 +28,36 @@ enum TransactionType {
 
 // Usuários
 model User {
-  id        String    @id @default(uuid())
-  email     String    @unique
-  password  String
-  name      String?
-  phone     String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  addresses Address[]
-  orders    Order[]
-  cart      Cart?     // Um usuário pode ter um carrinho
-  wishlist  Wishlist? // Um usuário pode ter uma wishlist
-  transactions Transaction[] // NOVO: Transações feitas por este usuário
+  id         String         @id @default(uuid())
+  email      String         @unique
+  password   String
+  name       String?
+  phone      String?
+  cpf        String?        // ADICIONADO: Campo CPF
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  addresses  Address[]
+  orders     Order[]
+  cart       Cart?
+  wishlist   Wishlist?
+  transactions Transaction[]
 }
 
 // Endereços de Usuários
 model Address {
-  id         String   @id @default(uuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id])
-  street     String
-  number     String
-  complement String?
+  id           String  @id @default(uuid())
+  userId       String
+  user         User    @relation(fields: [userId], references: [id])
+  street       String
+  number       String
+  complement   String?
   neighborhood String
-  city       String
-  state      String
-  zipCode    String
-  isDefault  Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  city         String
+  state        String
+  zipCode      String
+  isDefault    Boolean @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // Categorias de Produtos
@@ -67,44 +68,44 @@ model Category {
   description String?
   imageUrl    String?
   products    Product[]
-  createdAt   DateTime  @default(now()) // Adicionado para consistência
-  updatedAt   DateTime  @updatedAt // Adicionado para consistência
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 // Produtos
 model Product {
-  id           String      @id @default(uuid())
-  name         String
-  description  String?
-  price        Decimal     @db.Decimal(10, 2) // ALTERADO: De Float para Decimal
-  originalPrice Decimal?   @db.Decimal(10, 2) // ALTERADO: De Float para Decimal
-  imageUrl     String
-  images       String[]    @default([]) // Array de URLs de imagens
-  categoryId   String
-  category     Category    @relation(fields: [categoryId], references: [id])
-  sizes        String[]    @default([]) // Ex: ["P", "M", "G"]
-  colors       String[]    @default([]) // Ex: ["Vermelho", "Azul"]
-  isNew        Boolean     @default(false)
-  isFeatured   Boolean     @default(false) // Para produtos em destaque
-  discount     Int?        // Percentual de desconto
-  stock        Int         @default(0) // Quantidade em estoque
-  weight       Float?      // Peso em kg para frete
-  dimensions   Json?       // { length: Float, width: Float, height: Float } em cm
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  cartItems    CartItem[]
+  id            String         @id @default(uuid())
+  name          String
+  description   String?
+  price         Decimal        @db.Decimal(10, 2)
+  originalPrice Decimal?       @db.Decimal(10, 2)
+  images        String[]       @default([]) // Array de URLs de imagens
+  categoryId    String
+  category      Category       @relation(fields: [categoryId], references: [id])
+  sizes         String[]       @default([]) // Ex: ["P", "M", "G"]
+  colors        String[]       @default([]) // Ex: ["Vermelho", "Azul"]
+  isNew         Boolean        @default(false)
+  isFeatured    Boolean        @default(false)
+  discount      Int?           // Percentual de desconto
+  stock         Int            @default(0)
+  weight        Float?         // Peso em kg para frete
+  dimensions    Json?          // { length: Float, width: Float, height: Float } em cm
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  cartItems     CartItem[]
   wishlistItems WishlistItem[]
-  orderItems   OrderItem[]
+  orderItems    OrderItem[]
 }
 
-// Carrinho de Compras (um por usuário)
+// Carrinho de Compras (um por usuário ou por convidado)
 model Cart {
-  id        String     @id @default(uuid())
-  userId    String     @unique // Relacionamento 1:1 com User
-  user      User       @relation(fields: [userId], references: [id])
+  id        String   @id @default(uuid())
+  userId    String?  @unique // ALTERADO: userId agora é opcional para permitir carrinhos de convidados
+  user      User?    @relation(fields: [userId], references: [id]) // ALTERADO: Relacionamento com User agora é opcional
+  guestId   String?  @unique // Campo para identificar carrinhos de convidados, também opcional e único
   items     CartItem[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Itens do Carrinho
@@ -115,6 +116,7 @@ model CartItem {
   productId String
   product   Product  @relation(fields: [productId], references: [id])
   quantity  Int
+  price     Decimal  @db.Decimal(10, 2) @default(0.00)
   size      String?
   color     String?
   createdAt DateTime @default(now())
@@ -123,56 +125,61 @@ model CartItem {
 
 // Wishlist (Lista de Desejos)
 model Wishlist {
-  id        String         @id @default(uuid())
-  userId    String         @unique // Relacionamento 1:1 com User
-  user      User           @relation(fields: [userId], references: [id])
-  items     WishlistItem[]
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id           String       @id @default(uuid())
+  userId       String       @unique // Relacionamento 1:1 com User
+  user         User         @relation(fields: [userId], references: [id])
+  items        WishlistItem[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 }
 
 // Itens da Wishlist
 model WishlistItem {
-  id        String   @id @default(uuid())
+  id         String   @id @default(uuid())
   wishlistId String
-  wishlist  Wishlist @relation(fields: [wishlistId], references: [id])
-  productId String
-  product   Product  @relation(fields: [productId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id])
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 // Pedidos
 model Order {
-  id            String      @id @default(uuid())
-  userId        String
-  user          User        @relation(fields: [userId], references: [id])
-  status        OrderStatus @default(PENDING)
-  totalAmount   Decimal     @db.Decimal(10, 2) // ALTERADO: De Float para Decimal
-  shippingPrice Decimal     @db.Decimal(10, 2) // ALTERADO: De Float para Decimal
-  // Endereço de entrega do pedido (snapshot)
-  shippingAddressStreet     String
-  shippingAddressNumber     String
-  shippingAddressComplement String?
+  id                      String    @id @default(uuid())
+  userId                  String?   // Tornar userId opcional
+  user                    User?     @relation(fields: [userId], references: [id]) // Tornar relacionamento opcional
+  guestId                 String?   // ID para identificar o convidado. Removida a restrição @unique
+  guestName               String?   // Nome do convidado
+  guestEmail              String?   // Email do convidado
+  guestPhone              String?   // Telefone do convidado
+  guestCpf                String?   // ADICIONADO: CPF do convidado
+
+  status                  OrderStatus @default(PENDING)
+  totalAmount             Decimal   @db.Decimal(10, 2)
+  shippingPrice           Decimal   @db.Decimal(10, 2)
+  shippingService         String
+
+  shippingAddressStreet       String
+  shippingAddressNumber       String
+  shippingAddressComplement   String?
   shippingAddressNeighborhood String
-  shippingAddressCity       String
-  shippingAddressState      String
-  shippingAddressZipCode    String
-  paymentMethod String
-  paymentDetails Json? // Dados específicos do gateway de pagamento
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  items         OrderItem[]
+  shippingAddressCity         String
+  shippingAddressState        String
+  shippingAddressZipCode      String
+  paymentMethod               String
+  paymentDetails              Json?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+  items                       OrderItem[]
 
-  // CORRIGIDO: Relacionamento 1:1 com Transaction
-  // O campo 'transaction' aqui apenas define o lado inverso do relacionamento
-  // Sem 'fields' ou 'references' aqui.
-  transaction   Transaction?
-  // O orderId na Transaction é que fará a ligação.
+  transaction             Transaction?
 
-  // NOVO: Opcional: ID do cupom usado
-  couponId      String?
-  coupon        Coupon?      @relation(fields: [couponId], references: [id])
+  couponId                String?
+  coupon                  Coupon?   @relation(fields: [couponId], references: [id])
+
+  @@index([userId])
+  @@index([guestId])
 }
 
 // Itens do Pedido
@@ -183,7 +190,7 @@ model OrderItem {
   productId String
   product   Product  @relation(fields: [productId], references: [id])
   quantity  Int
-  price     Decimal  @db.Decimal(10, 2) // ALTERADO: De Float para Decimal
+  price     Decimal  @db.Decimal(10, 2)
   size      String?
   color     String?
   createdAt DateTime @default(now())
@@ -192,45 +199,41 @@ model OrderItem {
 
 // NOVO: Modelo para Transações Financeiras (para pagamentos de pedidos)
 model Transaction {
-  id                 String          @id @default(uuid())
-  userId             String          // O usuário que realizou a transação
-  user               User            @relation(fields: [userId], references: [id])
-  amount             Decimal         @db.Decimal(10, 2) // Valor da transação
-  type               TransactionType // Tipo da transação (PAYMENT, REFUND)
-  status             String          // Status da transação (PENDING, COMPLETED, FAILED, REFUNDED, etc.)
-  description        String?         // Descrição da transação (ex: "Pagamento do pedido #XYZ")
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  id                   String        @id @default(uuid())
+  userId               String?       // ALTERADO: Tornar userId opcional
+  user                 User?         @relation(fields: [userId], references: [id]) // ALTERADO: Relacionamento opcional
+  amount               Decimal       @db.Decimal(10, 2)
+  type                 TransactionType
+  status               String
+  description          String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
-  // CORRIGIDO: Relacionamento 1:1 com Order
-  // Este lado define a chave estrangeira (orderId) e a referência ao Order.id
-  order              Order?          @relation(fields: [orderId], references: [id])
-  orderId            String?         @unique // Garante que a transação esteja ligada a um único pedido
+  order                Order?        @relation(fields: [orderId], references: [id])
+  orderId              String?       @unique
 
-  // Propriedades para integração com gateway de pagamento
-  gatewayTransactionId String?       // ID da transação no gateway de pagamento (PagSeguro, Stripe, etc.)
-  qrCodeUrl          String?       // URL do QR Code gerado pelo gateway de pagamento (se aplicável)
+  gatewayTransactionId String?
+  qrCodeUrl            String?
+  boletoUrl            String?       // ADICIONADO: Campo para URL do Boleto
 
-  // Referência interna para transações (se necessário para algum controle interno)
-  transactionRef     String?
+  transactionRef       String?
 
-  // ID do cupom associado à transação (se houver)
-  couponId           String?
-  coupon             Coupon?         @relation(fields: [couponId], references: [id])
+  couponId             String?
+  coupon               Coupon?       @relation(fields: [couponId], references: [id])
 }
 
 // NOVO: Modelo para Cupons de Desconto
 model Coupon {
-  id               String        @id @default(uuid())
-  code             String        @unique // Código do cupom (ex: "DESCONTO10")
-  discountAmount   Decimal?      @db.Decimal(10, 2) // Valor do desconto (ex: 10.00)
-  discountPercentage Int?        // Percentual do desconto (ex: 10 para 10%)
-  expirationDate   DateTime?
-  usageLimit       Int?          // Limite de usos total
-  usedCount        Int           @default(0) // Quantidade de vezes que foi usado
-  isActive         Boolean       @default(true)
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-  orders           Order[]       // Pedidos que usaram este cupom
-  transactions     Transaction[] // Transações que usaram este cupom (para rastreamento)
+  id                 String        @id @default(uuid())
+  code               String        @unique
+  discountAmount     Decimal?      @db.Decimal(10, 2)
+  discountPercentage Int?
+  expirationDate     DateTime?
+  usageLimit         Int?
+  usedCount          Int           @default(0)
+  isActive           Boolean       @default(true)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  orders             Order[]
+  transactions       Transaction[]
 }

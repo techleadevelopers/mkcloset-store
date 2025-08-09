@@ -27,7 +27,7 @@ export class ConfigService {
 
   // --- Configurações do PagSeguro ---
   get pagSeguroApiUrl(): string {
-    return this.nestConfigService.get<string>('PAGSEGURO_API_URL') || 'https://sandbox.api.pagseguro.com';
+    return this.nestConfigService.get<string>('PAGSEGURO_API_URL') || 'https://api.pagseguro.com';
   }
 
   get pagSeguroApiToken(): string {

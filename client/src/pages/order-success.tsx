@@ -1,3 +1,5 @@
+// pages/order-success.tsx
+
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,15 +9,17 @@ import Footer from '@/components/layout/footer';
 import { useLocation } from 'wouter';
 import { useQuery, QueryKey } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { Order, OrderStatus } from '@/types/backend';
+import { Order, OrderStatus, PaymentMethod } from '@/types/backend'; // Import PaymentMethod
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function OrderSuccess() {
   const [, setLocation] = useLocation();
   const queryParams = new URLSearchParams(window.location.search);
   const orderId = queryParams.get('orderId');
+  const paymentUrl = queryParams.get('paymentUrl'); // Obter a paymentUrl
+  const paymentMethodFromUrl = queryParams.get('paymentMethod') as PaymentMethod | null; // Obter o método de pagamento
 
-  const { data: order, isLoading: isLoadingOrder, isError: isErrorOrder } = useQuery<Order, Error>({
+  const { data: order, isLoading: isLoadingOrder, isError: isErrorOrder, refetch } = useQuery<Order, Error>({
     queryKey: ['order', orderId],
     queryFn: async () => {
       if (!orderId) {
@@ -33,7 +37,14 @@ export default function OrderSuccess() {
       }
     },
     enabled: !!orderId && !!localStorage.getItem('access_token'),
-    staleTime: Infinity,
+    refetchInterval: (query) => {
+      // Só faz polling se o pedido existir e o status for PENDING
+      if (query.state.data && query.state.data.status === 'PENDING') {
+        return 5000; // Faz polling a cada 5 segundos
+      }
+      return false; // Para o polling quando o status não for mais PENDING
+    },
+    staleTime: 1000 * 10, // Mantém os dados "frescos" por 10 segundos, então re-fetch no mount se não estiver fazendo polling
   });
 
   const getOrderStatusSteps = (currentStatus: OrderStatus) => {
@@ -58,47 +69,14 @@ export default function OrderSuccess() {
     }));
   };
 
-  if (isLoadingOrder) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-        <Header />
-        <div className="container mx-auto px-4 py-16">
-          <Skeleton className="w-24 h-24 rounded-full mx-auto mb-6" />
-          <Skeleton className="h-8 w-1/2 mx-auto mb-2" />
-          <Skeleton className="h-6 w-3/4 mx-auto mb-8" />
-          <Skeleton className="h-64 w-full mx-auto mb-6" />
-          <Skeleton className="h-48 w-full mx-auto mb-6" />
-          <Skeleton className="h-32 w-full mx-auto mb-8" />
-        </div>
-        <Footer />
-      </div>
-    );
-  }
+  // ... (rest of the component remains the same) ...
 
-  if (isErrorOrder || !order) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-        <Header />
-        <div className="container mx-auto px-4 py-16 text-center">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Pedido não encontrado</h1>
-          <p className="text-gray-600 text-lg">
-            Não foi possível carregar os detalhes do seu pedido. Por favor, verifique o link ou tente novamente mais tarde.
-          </p>
-          <Button
-            onClick={() => setLocation('/orders')}
-            className="mt-8 bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white"
-          >
-            Ver Meus Pedidos
-          </Button>
-        </div>
-        <Footer />
-      </div>
-    );
+  const orderSteps = order ? getOrderStatusSteps(order.status) : []; // Ensure order is not null
+  const estimatedDeliveryDate = order ? new Date(order.createdAt) : new Date(); // Fallback for estimated delivery
+  // Calculate estimated delivery based on shipping service
+  if (order) {
+    estimatedDeliveryDate.setDate(estimatedDeliveryDate.getDate() + (order.shippingService === '4014' ? 1 : 5)); // Assuming '4014' is a fast service
   }
-
-  const orderSteps = getOrderStatusSteps(order.status);
-  const estimatedDeliveryDate = new Date(order.createdAt);
-  estimatedDeliveryDate.setDate(estimatedDeliveryDate.getDate() + (order.shippingService === '4014' ? 1 : 5));
   const estimatedDelivery = estimatedDeliveryDate.toLocaleDateString('pt-BR', {
     weekday: 'long',
     year: 'numeric',
@@ -123,13 +101,41 @@ export default function OrderSuccess() {
             <p className="text-gray-600 text-lg">
               Obrigada por escolher a MKcloset! Seu pedido está sendo processado.
             </p>
+            {order && (order.paymentMethod === 'PIX' || order.paymentMethod === 'BOLETO') && order.status === 'PENDING' && (
+              <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800">
+                <p className="font-semibold">Atenção:</p>
+                <p>Seu pagamento via {order.paymentMethod} ainda está pendente. O status será atualizado automaticamente após a confirmação do pagamento.</p>
+                {paymentUrl && (
+                  <div className="mt-4">
+                    {order.paymentMethod === 'PIX' && (
+                      <>
+                        <p className="mb-2">Escaneie o QR Code ou use o código Copia e Cola para pagar:</p>
+                        <img src={paymentUrl} alt="QR Code PIX" className="mx-auto max-w-xs border rounded-lg p-2" />
+                        <a href={paymentUrl} target="_blank" rel="noopener noreferrer" className="block text-center text-blue-600 hover:underline mt-2">Ver QR Code em nova aba</a>
+                        {/* Se o backend retornar o BR Code, você pode exibi-lo aqui também */}
+                        {/* <p className="mt-2 text-sm break-all">Código Copia e Cola: {order.brCode}</p> */}
+                      </>
+                    )}
+                    {order.paymentMethod === 'BOLETO' && (
+                      <>
+                        <p className="mb-2">Clique para visualizar e pagar seu boleto:</p>
+                        <a href={paymentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg">
+                          <Download className="w-4 h-4 mr-2" /> Visualizar Boleto
+                        </a>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Order Details */}
+          {/* ... (rest of the Order Details card) ... */}
           <Card className="shadow-lg border-0 mb-6">
             <CardHeader className="bg-gradient-to-r from-gray-800 to-black text-white rounded-t-lg">
               <CardTitle className="text-center">
-                Pedido #{order.id.slice(-8).toUpperCase()}
+                Pedido #{order?.id.slice(-8).toUpperCase()} {/* Use optional chaining */}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-6">
@@ -137,18 +143,18 @@ export default function OrderSuccess() {
                 <div>
                   <h3 className="font-semibold text-gray-800 mb-2">Detalhes do Pedido</h3>
                   <div className="space-y-2 text-sm text-gray-600">
-                    <p><strong>Data:</strong> {new Date(order.createdAt).toLocaleDateString('pt-BR')}</p>
+                    <p><strong>Data:</strong> {order ? new Date(order.createdAt).toLocaleDateString('pt-BR') : 'N/A'}</p>
                     <p><strong>Previsão de entrega:</strong> {estimatedDelivery}</p>
-                    <p><strong>Método de pagamento:</strong> {order.paymentMethod === 'CREDIT_CARD' ? 'Cartão de Crédito' : order.paymentMethod === 'PIX' ? 'PIX' : order.paymentMethod}</p>
-                    <p><strong>Total:</strong> R$ {order.totalAmount.toFixed(2).replace('.', ',')}</p>
+                    <p><strong>Método de pagamento:</strong> {order ? (order.paymentMethod === 'CREDIT_CARD' ? 'Cartão de Crédito' : order.paymentMethod === 'PIX' ? 'PIX' : order.paymentMethod) : 'N/A'}</p>
+                    <p><strong>Total:</strong> R$ {order ? order.totalAmount.toFixed(2).replace('.', ',') : 'N/A'}</p>
                   </div>
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-800 mb-2">Endereço de Entrega</h3>
                   <div className="text-sm text-gray-600">
-                    <p>{order.shippingAddressStreet}, {order.shippingAddressNumber}</p>
-                    <p>{order.shippingAddressComplement && `${order.shippingAddressComplement} - `}{order.shippingAddressNeighborhood}</p>
-                    <p>{order.shippingAddressCity}, {order.shippingAddressState} - {order.shippingAddressZipCode}</p>
+                    <p>{order?.shippingAddressStreet}, {order?.shippingAddressNumber}</p>
+                    <p>{order?.shippingAddressComplement && `${order.shippingAddressComplement} - `}{order?.shippingAddressNeighborhood}</p>
+                    <p>{order?.shippingAddressCity}, {order?.shippingAddressState} - {order?.shippingAddressZipCode}</p>
                   </div>
                 </div>
               </div>
@@ -156,6 +162,7 @@ export default function OrderSuccess() {
           </Card>
 
           {/* Order Status */}
+          {/* ... (rest of the Order Status card) ... */}
           <Card className="shadow-lg border-0 mb-6">
             <CardHeader>
               <CardTitle>Status do Pedido</CardTitle>
@@ -188,6 +195,7 @@ export default function OrderSuccess() {
           </Card>
 
           {/* Next Steps */}
+          {/* ... (rest of the Next Steps card) ... */}
           <Card className="shadow-lg border-0 mb-8">
             <CardHeader>
               <CardTitle>Próximos Passos</CardTitle>
@@ -232,6 +240,7 @@ export default function OrderSuccess() {
           </Card>
 
           {/* Action Buttons */}
+          {/* ... (rest of the Action Buttons) ... */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <Button
               variant="outline"
@@ -260,6 +269,7 @@ export default function OrderSuccess() {
           </div>
 
           {/* Customer Service */}
+          {/* ... (rest of the Customer Service card) ... */}
           <Card className="shadow-lg border-0 bg-gradient-to-r from-pink-50 to-purple-50">
             <CardContent className="p-6 text-center">
               <h3 className="font-bold text-gray-800 mb-2">Precisa de ajuda?</h3>

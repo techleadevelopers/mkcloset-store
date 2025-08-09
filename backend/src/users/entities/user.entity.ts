@@ -1,8 +1,4 @@
-// Este arquivo é mais para tipagem e pode ser usado para transformar dados.
-// Com Prisma, muitas vezes você pode usar os tipos gerados diretamente:
-// import { User as PrismaUser } from '@prisma/client';
-// export class UserEntity implements PrismaUser { ... }
-// Mas para fins de exemplo, vamos criar uma classe simples baseada no Prisma.
+// src/users/entities/user.entity.ts
 
 import { User as PrismaUser } from '@prisma/client';
 
@@ -12,6 +8,7 @@ export class UserEntity implements PrismaUser {
   password: string; // Cuidado ao expor a senha! Remova em DTOs de saída.
   name: string | null;
   phone: string | null;
+  cpf: string | null; // ADICIONADO: Propriedade 'cpf' para corresponder ao schema.prisma
   createdAt: Date;
   updatedAt: Date;
 

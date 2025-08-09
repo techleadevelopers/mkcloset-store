@@ -1,365 +1,277 @@
-Documentação Detalhada do Backend MKcloset E-commerce
-Este documento descreve a arquitetura, propósito e interconexões de cada módulo e arquivo TypeScript que compõe o backend da aplicação de e-commerce MKcloset, construído com NestJS e Prisma.
+Documentação da Arquitetura e Lógica de Backend
+Este documento descreve a arquitetura e a lógica de negócio de um sistema de e-commerce construído com NestJS, utilizando Prisma ORM para interação com o banco de dados. A aplicação é modular, com cada módulo encapsulando funcionalidades específicas e interagindo através de serviços e controladores.
 
-I. Estrutura Central da Aplicação
-Esta seção descreve os arquivos fundamentais que iniciam e configuram a aplicação NestJS.
+1. Visão Geral da Arquitetura
+A aplicação segue o padrão de arquitetura de módulos do NestJS, onde cada funcionalidade principal (usuários, produtos, pedidos, pagamentos, etc.) é organizada em seu próprio módulo.
 
-src/main.ts
-Propósito: O ponto de entrada da aplicação NestJS. Ele inicializa o aplicativo, configura middlewares globais e inicia o servidor.
-Funções Globais/Configurações:
-NestFactory.create(AppModule): Cria uma instância da aplicação NestJS usando o AppModule como módulo raiz.
-app.enableCors(): Habilita o Cross-Origin Resource Sharing (CORS), permitindo que o frontend (rodando em http://localhost:3000 em desenvolvimento) se comunique com o backend. Importante: Em produção, o origin deve ser o domínio real do frontend.
-app.useGlobalPipes(new ValidationPipe()): Aplica um ValidationPipe globalmente. Isso garante que todos os DTOs (Data Transfer Objects) usados nos controladores sejam automaticamente validados de acordo com as regras definidas com class-validator.
-transform: true: Converte o payload de entrada para uma instância da classe DTO.
-whitelist: true: Remove propriedades do payload que não estão definidas no DTO.
-forbidNonWhitelisted: true: Lança um erro se houver propriedades não permitidas no payload.
-app.listen(port): Inicia o servidor HTTP na porta especificada (padrão 3001).
-Interconexões: É o bootstrap do backend, conectando o NestJS ao ambiente de execução e configurando comportamentos globais que afetam todos os módulos e rotas.
-src/app.module.ts
-Propósito: O módulo raiz da aplicação NestJS. Ele agrega todos os outros módulos de funcionalidade, configurando a estrutura geral do backend.
-Funções Globais/Configurações:
-ConfigModule.forRoot({ isGlobal: true }): Carrega variáveis de ambiente do arquivo .env e as torna acessíveis globalmente através do ConfigService.
-imports: Lista todos os módulos de funcionalidade (Auth, Users, Products, etc.) e módulos de infraestrutura (Prisma, Config, Common). Ao importar um módulo, seus provedores e controladores são disponibilizados para o restante da aplicação.
-Dependências: Importa todos os módulos de funcionalidade e infraestrutura do projeto.
-Interconexões: Atua como o orquestrador principal, garantindo que todos os componentes necessários estejam disponíveis e configurados corretamente para a aplicação.
-src/app.controller.ts / src/app.service.ts
-Propósito: Fornecem uma rota básica para o root da API e um endpoint de health check.
-app.controller.ts:
-@Get(): Retorna uma mensagem de boas-vindas.
-@Get('health'): Retorna um status ok, útil para monitoramento de saúde da aplicação em ambientes de produção.
-app.service.ts: Contém a lógica simples para as rotas do AppController.
-Interconexões: São os endpoints mais básicos da API, servindo principalmente para verificar se o servidor está rodando.
-II. Módulos de Infraestrutura e Utilidades Comuns
-Esta seção detalha os módulos e componentes que fornecem serviços e funcionalidades globais ou de baixo nível.
-
-src/prisma/
-Propósito: Gerencia a conexão e interação com o banco de dados via Prisma ORM.
-src/prisma/prisma.module.ts:
-providers: [PrismaService]: Declara o PrismaService como um provedor.
-exports: [PrismaService]: Exporta o PrismaService para que outros módulos possam injetá-lo e utilizá-lo.
-src/prisma/prisma.service.ts:
-@Injectable(): Marca a classe como um provedor injetável.
-extends PrismaClient: Herda todas as funcionalidades do cliente Prisma.
-onModuleInit(): Hook do ciclo de vida do NestJS. Garante que a conexão com o banco de dados seja estabelecida (this.$connect()) quando o módulo é inicializado.
-enableShutdownHooks(): Configura um hook para fechar a conexão com o banco de dados (this.$disconnect()) de forma graciosa quando a aplicação é encerrada.
-Dependências: PrismaClient (do @prisma/client).
-Interconexões: O PrismaModule é importado por todos os módulos de funcionalidade que precisam acessar o banco de dados, permitindo que o PrismaService seja injetado em seus serviços.
-src/config/
-Propósito: Gerencia o carregamento e acesso a variáveis de ambiente e configurações da aplicação.
-src/config/config.module.ts:
-imports: [NestConfigModule.forRoot()]: Configura o módulo de configuração do NestJS para carregar variáveis do .env.
-src/config/config.service.ts:
-@Injectable(): Marca a classe como um provedor injetável.
-constructor(private nestConfigService: NestConfigService): Injeta o ConfigService nativo do NestJS.
-get<string>('VARIABLE_NAME'): Métodos getter para acessar variáveis de ambiente de forma tipada (ex: databaseUrl, jwtSecret). Isso centraliza o acesso às configurações e evita erros de digitação.
-Dependências: @nestjs/config.
-Interconexões: O ConfigModule é importado globalmente no AppModule, e o ConfigService é injetado em outros serviços (ex: AuthService, ShippingService, StripeService) para acessar configurações sensíveis como chaves de API e segredos JWT.
-src/common/
-Propósito: Contém componentes e utilitários que são compartilhados e aplicados globalmente em vários módulos da aplicação.
-src/common/common.module.ts:
-imports: [AuthModule]: Importa AuthModule porque JwtAuthGuard depende de provedores definidos lá (JwtService).
-providers:
-JwtAuthGuard: Provedor do guard de autenticação JWT.
-CurrentUserDecorator: Provedor do decorator personalizado.
-APP_FILTER, APP_INTERCEPTOR: Usam tokens especiais para aplicar HttpExceptionFilter e TransformInterceptor globalmente.
-AppConstants: Provedor da classe de constantes.
-exports: Torna esses provedores disponíveis para injeção em outros módulos.
-Interconexões: Este módulo centraliza a configuração de comportamentos transversais da aplicação.
-src/common/filters/http-exception.filter.ts
-Propósito: Um filtro de exceção global que captura todas as HttpException lançadas na aplicação e formata a resposta de erro de forma consistente.
-@Catch(HttpException): Indica que este filtro deve capturar exceções do tipo HttpException.
-catch(exception, host): Método principal que formata a resposta JSON de erro, incluindo statusCode, timestamp, path e a mensagem/detalhes do erro.
-Interconexões: Aplicado globalmente via APP_FILTER no CommonModule, garantindo que todas as respostas de erro HTTP tenham um formato padronizado e amigável para o frontend.
-src/common/interceptors/transform.interceptor.ts
-Propósito: Um interceptor global que transforma a resposta de sucesso de todas as requisições, encapsulando os dados retornados em um objeto data.
-intercept(context, next): O método principal que usa rxjs/map para envolver a resposta.
-Interconexões: Aplicado globalmente via APP_INTERCEPTOR no CommonModule. Isso padroniza a estrutura das respostas da API (ex: { "data": { ... } }), o que pode simplificar o tratamento de dados no frontend.
-src/common/guards/jwt-auth.guard.ts
-Propósito: Um guard de autenticação que protege rotas, garantindo que apenas usuários autenticados com um JWT válido possam acessá-las.
-extends AuthGuard('jwt'): Utiliza a estratégia JWT do Passport.js.
-Interconexões: Usado com o decorator @UseGuards(JwtAuthGuard) em controladores ou métodos de controlador para proteger endpoints.
-src/common/decorators/current-user.decorator.ts
-Propósito: Um decorator de parâmetro personalizado que extrai o objeto do usuário autenticado (req.user) e o injeta diretamente no parâmetro do método do controlador.
-createParamDecorator: Função do NestJS para criar decorators de parâmetro.
-Interconexões: Usado com @CurrentUser() em métodos de controlador protegidos por JwtAuthGuard para acessar facilmente os dados do usuário logado.
-src/common/constants/app.constants.ts
-Propósito: Armazena constantes globais da aplicação, como valores mínimos/máximos, limites, URLs padrão, etc.
-static readonly: Define constantes que podem ser acessadas diretamente da classe (ex: AppConstants.FREE_SHIPPING_THRESHOLD).
-Interconexões: Injetado como provedor no CommonModule e acessado em serviços (ex: ShippingService) para garantir consistência em valores chave.
-III. Módulos de Funcionalidade
-Esta seção detalha os módulos específicos de negócio do e-commerce.
-
-src/auth/
-Propósito: Gerencia a autenticação de usuários, incluindo registro, login e validação de tokens JWT.
-src/auth/auth.module.ts: Importa UsersModule (para gerenciar usuários), PassportModule (para estratégias de autenticação) e JwtModule (para criação e validação de JWTs).
-src/auth/auth.controller.ts:
-POST /auth/register: Endpoint para registro de novos usuários.
-POST /auth/login: Endpoint para login. Usa LocalAuthGuard para autenticação baseada em email/senha.
-GET /auth/profile: Endpoint protegido por JWT para obter o perfil do usuário logado.
-src/auth/auth.service.ts:
-register(dto): Cria um novo usuário, hash da senha e salva no DB.
-validateUser(email, pass): Valida credenciais de usuário (usado pela estratégia local).
-login(user): Gera um JWT para o usuário autenticado.
-src/auth/dto/register-user.dto.ts: Define a estrutura e regras de validação para dados de registro de usuário (nome, email, senha, telefone).
-src/auth/dto/login-user.dto.ts: Define a estrutura e regras de validação para dados de login (email, senha).
-src/auth/strategies/local.strategy.ts: Estratégia do Passport.js para autenticação baseada em email e senha. Usa AuthService.validateUser.
-src/auth/strategies/jwt.strategy.ts: Estratégia do Passport.js para autenticação baseada em tokens JWT. Valida o token e anexa o usuário à requisição.
-src/auth/interfaces/jwt-payload.interface.ts: Define a interface para o payload do JWT.
-src/auth/guards/local-auth.guard.ts: Um guard simples que estende AuthGuard('local') para ser usado nas rotas de login.
-Dependências: UsersModule, PrismaModule, @nestjs/passport, @nestjs/jwt, bcrypt, class-validator.
-Interações:
-Frontend: O frontend enviará credenciais para /auth/login e /auth/register. Após o login, armazenará o access_token e o enviará no cabeçalho Authorization para rotas protegidas.
-UsersModule: AuthService interage com UsersService para criar e buscar usuários.
-src/users/
-Propósito: Gerencia as operações relacionadas aos usuários, seus perfis e endereços.
-src/users/users.module.ts: Importa PrismaModule.
-src/users/users.controller.ts:
-POST /users: Cria um novo usuário (usado principalmente pelo registro).
-GET /users/me: Obtém o perfil do usuário logado.
-PATCH /users/me: Atualiza o perfil do usuário logado.
-POST /users/me/addresses: Adiciona um novo endereço para o usuário logado.
-GET /users/me/addresses: Obtém todos os endereços do usuário logado.
-src/users/users.service.ts:
-create(dto): Cria um novo usuário no DB.
-findByEmail(email): Busca um usuário por email.
-findById(id): Busca um usuário por ID.
-update(id, dto): Atualiza dados de um usuário.
-remove(id): Remove um usuário.
-addAddress(userId, dto): Adiciona um endereço a um usuário.
-findAddressesByUserId(userId): Retorna os endereços de um usuário.
-src/users/dto/create-user.dto.ts: Define a estrutura para criação de usuário.
-src/users/dto/update-user.dto.ts: Define a estrutura para atualização de usuário (usa PartialType).
-src/users/dto/create-address.dto.ts: Define a estrutura para criação de endereço.
-src/users/entities/user.entity.ts: Representação da entidade User (baseada no Prisma).
-Dependências: PrismaModule, class-validator.
-Interações:
-AuthModule: AuthService utiliza UsersService para criar e validar usuários durante o registro e login.
-OrdersModule: OrdersService utiliza UsersService para buscar endereços de entrega.
-Frontend: Consumirá os endpoints /users/me para gerenciar o perfil do usuário.
-src/categories/
-Propósito: Gerencia as operações CRUD para categorias de produtos.
-src/categories/categories.module.ts: Importa PrismaModule.
-src/categories/categories.controller.ts:
-POST /categories: Cria uma nova categoria.
-GET /categories: Lista todas as categorias.
-GET /categories/:id: Obtém uma categoria específica.
-PATCH /categories/:id: Atualiza uma categoria.
-DELETE /categories/:id: Remove uma categoria.
-src/categories/categories.service.ts:
-create(dto): Cria uma categoria.
-findAll(): Lista todas as categorias.
-findOne(id): Busca uma categoria por ID.
-update(id, dto): Atualiza uma categoria.
-remove(id): Remove uma categoria.
-src/categories/dto/create-category.dto.ts: Define a estrutura para criação de categoria.
-src/categories/dto/update-category.dto.ts: Define a estrutura para atualização de categoria.
-src/categories/entities/category.entity.ts: Representação da entidade Category.
-Dependências: PrismaModule, class-validator.
-Interações:
-ProductsModule: ProductsService utiliza CategoriesService para validar se uma categoria existe ao criar ou atualizar um produto.
-Frontend: Consumirá /categories para exibir as categorias na navegação e filtros.
-src/products/
-Propósito: Gerencia as operações CRUD e busca/filtragem de produtos.
-src/products/products.module.ts: Importa PrismaModule e CategoriesModule.
-src/products/products.controller.ts:
-POST /products: Cria um novo produto.
-GET /products: Lista todos os produtos com suporte a filtros e ordenação via ProductQueryDto.
-GET /products/featured: Lista produtos marcados como destaque.
-GET /products/:id: Obtém um produto específico.
-PATCH /products/:id: Atualiza um produto.
-DELETE /products/:id: Remove um produto.
-src/products/products.service.ts:
-create(dto): Cria um produto, validando a categoryId.
-findAll(query): Implementa a lógica de busca, filtragem (por search, categoryId, isFeatured, isNew) e ordenação (sortBy).
-findFeatured(): Retorna produtos em destaque.
-findOne(id): Busca um produto por ID.
-update(id, dto): Atualiza um produto.
-remove(id): Remove um produto.
-src/products/dto/create-product.dto.ts: Define a estrutura para criação de produto, incluindo validações para preço, estoque, dimensões, etc.
-src/products/dto/update-product.dto.ts: Define a estrutura para atualização de produto.
-src/products/dto/product-query.dto.ts: Define os parâmetros de query para filtrar e ordenar produtos.
-src/products/entities/product.entity.ts: Representação da entidade Product.
-Dependências: PrismaModule, CategoriesModule, class-validator, class-transformer.
-Interações:
-CategoriesModule: ProductsService depende de CategoriesService para validar categorias.
-CartModule, WishlistModule, OrdersModule, InventoryModule: Esses módulos dependem de ProductsService para obter informações de produtos (preço, estoque, etc.).
-Frontend: Consumirá /products para as páginas de listagem e /products/:id para detalhes do produto.
-src/cart/
-Propósito: Gerencia as operações do carrinho de compras de um usuário.
-src/cart/cart.module.ts: Importa PrismaModule, ProductsModule, UsersModule.
-src/cart/cart.controller.ts:
-GET /cart: Obtém ou cria o carrinho do usuário logado.
-POST /cart/items: Adiciona um item ao carrinho.
-PATCH /cart/items/:itemId: Atualiza a quantidade de um item no carrinho.
-DELETE /cart/items/:itemId: Remove um item do carrinho.
-DELETE /cart/clear: Limpa todo o carrinho.
-src/cart/cart.service.ts:
-getOrCreateCart(userId): Busca o carrinho de um usuário ou cria um novo se não existir.
-addItemToCart(userId, dto): Adiciona um produto ao carrinho, verificando estoque e opções (tamanho/cor).
-updateCartItemQuantity(userId, itemId, quantity): Atualiza a quantidade de um item, removendo-o se a quantidade for 0.
-removeCartItem(userId, itemId): Remove um item específico do carrinho.
-clearCart(userId): Remove todos os itens do carrinho.
-calculateCartTotals(cart): Função auxiliar para calcular o total e a contagem de itens do carrinho.
-src/cart/dto/add-to-cart.dto.ts: Define a estrutura para adicionar um item ao carrinho.
-src/cart/dto/update-cart-item.dto.ts: Define a estrutura para atualizar a quantidade de um item.
-src/cart/entities/cart.entity.ts: Representação das entidades Cart e CartItem.
-Dependências: PrismaModule, ProductsModule, UsersModule, class-validator.
-Interações:
-ProductsModule: CartService utiliza ProductsService para obter detalhes do produto e verificar estoque.
-UsersModule: CartService pode interagir com UsersService para garantir que o usuário existe (embora o JwtAuthGuard já faça isso).
-OrdersModule: OrdersService utiliza CartService para obter o carrinho antes de criar um pedido.
-Frontend: O frontend fará requisições para esses endpoints para gerenciar o carrinho de compras.
-src/wishlist/
-Propósito: Gerencia a lista de desejos de um usuário.
-src/wishlist/wishlist.module.ts: Importa PrismaModule, ProductsModule, UsersModule.
-src/wishlist/wishlist.controller.ts:
-GET /wishlist: Obtém ou cria a wishlist do usuário logado.
-POST /wishlist/items: Adiciona um item à wishlist.
-DELETE /wishlist/items/:productId: Remove um item da wishlist.
-src/wishlist/wishlist.service.ts:
-getOrCreateWishlist(userId): Busca a wishlist de um usuário ou cria uma nova.
-addItemToWishlist(userId, productId): Adiciona um produto à wishlist, verificando se já existe.
-removeItemFromWishlist(userId, productId): Remove um produto da wishlist.
-src/wishlist/dto/add-to-wishlist.dto.ts: Define a estrutura para adicionar um item à wishlist.
-src/wishlist/entities/wishlist.entity.ts: Representação das entidades Wishlist e WishlistItem.
-Dependências: PrismaModule, ProductsModule, UsersModule, class-validator.
-Interações:
-ProductsModule: WishlistService utiliza ProductsService para obter detalhes do produto.
-Frontend: O frontend fará requisições para esses endpoints para gerenciar a lista de desejos.
-src/orders/
-Propósito: Gerencia a criação, visualização e status de pedidos.
-src/orders/orders.module.ts: Importa PrismaModule, CartModule, UsersModule, ProductsModule.
-src/orders/orders.controller.ts:
-POST /orders: Cria um novo pedido a partir do carrinho do usuário.
-GET /orders: Lista todos os pedidos do usuário logado.
-GET /orders/:id: Obtém um pedido específico do usuário logado.
-src/orders/orders.service.ts:
-create(userId, dto): Lógica central para criar um pedido:
-Obtém o carrinho do usuário.
-Verifica estoque e captura o preço atual dos produtos.
-Obtém e copia o endereço de entrega do usuário para o pedido (garantindo imutabilidade).
-Realiza a criação do pedido e dos itens do pedido dentro de uma transação Prisma.
-Decrementa o estoque dos produtos.
-Limpa o carrinho após o pedido.
-findAllByUserId(userId): Lista todos os pedidos de um usuário.
-findOneByUserId(userId, orderId): Busca um pedido específico de um usuário.
-src/orders/dto/create-order.dto.ts: Define a estrutura para criação de um pedido (método de pagamento, ID do endereço de entrega, detalhes de pagamento).
-src/orders/entities/order.entity.ts: Representação das entidades Order e OrderItem.
-Dependências: PrismaModule, CartModule, UsersModule, ProductsModule, class-validator.
-Interações:
-CartModule: OrdersService obtém o carrinho do CartService.
-UsersModule: OrdersService obtém endereços do UsersService.
-ProductsModule: OrdersService verifica estoque e preços com ProductsService.
-PaymentsModule: PaymentsService atualiza o status de pedidos gerenciados por OrdersService.
-InventoryModule: OrdersService (poderia) interagir com InventoryService para gerenciar estoque.
-Frontend: O frontend enviará dados para /orders para finalizar a compra e consultará /orders para o histórico de pedidos.
-src/payments/
-Propósito: Gerencia o processamento de pagamentos e a integração com gateways de pagamento externos.
-src/payments/payments.module.ts: Importa PrismaModule, OrdersModule, ConfigModule. Inclui StripeService como provedor.
-src/payments/payments.controller.ts:
-POST /payments/process: Endpoint para iniciar o processamento de um pagamento.
-POST /payments/webhook/stripe: Endpoint para receber webhooks do Stripe (não protegido por JWT).
-src/payments/payments.service.ts:
-processPayment(userId, dto): Lógica principal para processar um pagamento. Verifica o status do pedido, delega o processamento a provedores específicos (ex: StripeService) e atualiza o status do pedido no DB.
-handleStripeWebhook(payload, signature): Método para processar eventos de webhook recebidos do Stripe, atualizando o status do pedido com base nas notificações do gateway.
-src/payments/dto/process-payment.dto.ts: Define a estrutura para processar um pagamento (ID do pedido, método, detalhes).
-src/payments/providers/stripe.service.ts:
-processCreditCardPayment(amount, token, orderId): Simula o processamento de pagamento via cartão de crédito com Stripe. Em uma implementação real, usaria a SDK do Stripe.
-constructWebhookEvent(): (Comentado) Método para validar e construir eventos de webhook do Stripe.
-Dependências: PrismaModule, OrdersModule, ConfigModule, class-validator.
-Interações:
-OrdersModule: PaymentsService interage com OrdersService para buscar e atualizar pedidos.
-ConfigModule: StripeService usa ConfigService para obter chaves de API.
-Frontend: O frontend enviará dados de pagamento (ex: token do cartão) para /payments/process.
-src/shipping/
-Propósito: Gerencia o cálculo de frete, incluindo validação de CEP e integração com APIs de transportadoras.
-src/shipping/shipping.module.ts: Importa ConfigModule, ProductsModule.
-src/shipping/shipping.controller.ts:
-POST /shipping/calculate: Endpoint para calcular as opções de frete. (Público, não exige autenticação).
-src/shipping/shipping.service.ts:
-calculateShipping(dto): Lógica principal para calcular o frete:
-Valida o CEP (usando ViaCEP).
-Calcula o peso total, valor e dimensões dos itens do carrinho.
-Implementa a lógica de simulação de frete regional do frontend, ajustando preços e prazos com base no CEP e nas características do pacote.
-Em um cenário real, faria chamadas a APIs externas de transportadoras (ex: Correios).
-src/shipping/dto/calculate-shipping.dto.ts: Define a estrutura para a requisição de cálculo de frete (CEP, itens do carrinho com detalhes do produto).
-src/shipping/interfaces/correios.interface.ts: Define as interfaces para as opções de frete retornadas.
-Dependências: ConfigModule, ProductsModule, axios (para ViaCEP), class-validator, class-transformer.
-Interações:
-Frontend: O FrontendShippingCalculator fará requisições para /shipping/calculate.
-ProductsModule: ShippingService pode precisar de ProductsService para obter detalhes de peso/dimensões dos produtos (embora o DTO de entrada já contenha isso no exemplo atual).
-src/inventory/
-Propósito: Gerencia o estoque de produtos. Embora a lógica principal de decremento/incremento seja feita no OrdersService dentro de uma transação, este módulo pode expor endpoints para gerenciamento de estoque por administradores.
-src/inventory/inventory.module.ts: Importa PrismaModule, ProductsModule.
-src/inventory/inventory.controller.ts:
-GET /inventory/:productId: Obtém o estoque de um produto.
-PATCH /inventory/:productId/stock: Atualiza a quantidade de estoque de um produto. (Geralmente protegido por RolesGuard para admins).
-src/inventory/inventory.service.ts:
-getStock(productId): Retorna a quantidade em estoque de um produto.
-updateStock(productId, quantity): Atualiza o estoque para uma quantidade específica.
-decrementStock(productId, quantity): Decrementa o estoque (usado por OrdersService).
-incrementStock(productId, quantity): Incrementa o estoque (usado para devoluções/cancelamentos).
-src/inventory/dto/update-stock.dto.ts: Define a estrutura para atualização de estoque.
-src/inventory/entities/stock.entity.ts: Representação da entidade de estoque (pode ser um objeto simples de retorno).
-Dependências: PrismaModule, ProductsModule, class-validator.
-Interações:
-ProductsModule: InventoryService interage com ProductsService para acessar e modificar o estoque dos produtos.
-OrdersModule: OrdersService utiliza InventoryService.decrementStock (ou faz a lógica diretamente no seu serviço, como no exemplo atual, para garantir transacionalidade).
-Frontend (Admin): Um painel de administração poderia consumir esses endpoints para gerenciar o inventário.
-IV. Fluxos de Interação Chave
-1. Fluxo de Autenticação (Registro/Login)
-Frontend (Register/Login Page): O usuário preenche o formulário.
-Frontend (axios/fetch): Envia POST para /auth/register ou /auth/login com RegisterUserDto ou LoginUserDto.
-Backend (AuthModule):
-AuthController recebe a requisição.
-Para register: AuthService.register cria o usuário (com senha hashed) via UsersService.
-Para login: LocalAuthGuard valida as credenciais via AuthService.validateUser. Se válido, AuthService.login gera um JWT.
-Backend (AuthService): Retorna o JWT e dados do usuário (sem senha).
-Frontend: Armazena o JWT (ex: localStorage) e o anexa a futuras requisições para rotas protegidas (Authorization: Bearer <token>).
-2. Fluxo de Gerenciamento de Produtos
-Frontend (Products/ProductDetail Page):
-Para listar: Envia GET para /products (com query params para filtros/ordenação).
-Para detalhes: Envia GET para /products/:id.
-Backend (ProductsModule):
-ProductsController recebe a requisição.
-ProductsService.findAll ou findOne consulta o DB via PrismaService, aplicando filtros/ordenação.
-Backend (ProductsService): Retorna os dados dos produtos.
-3. Fluxo do Carrinho de Compras
-Frontend (useCart hook / Cart Components):
-Para obter: Envia GET para /cart.
-Para adicionar: Envia POST para /cart/items com AddToCartDto.
-Para atualizar/remover: Envia PATCH/DELETE para /cart/items/:itemId.
-Backend (CartModule):
-CartController recebe a requisição (protegida por JwtAuthGuard).
-CartService executa a lógica (criar/obter carrinho, adicionar/atualizar/remover itens) interagindo com PrismaService e ProductsService (para validação de estoque/preço).
-Backend (CartService): Retorna o estado atualizado do carrinho.
-4. Fluxo de Cálculo de Frete
-Frontend (FrontendShippingCalculator): Envia POST para /shipping/calculate com CalculateShippingDto (CEP, itens do carrinho).
-Backend (ShippingModule):
-ShippingController recebe a requisição.
-ShippingService.calculateShipping valida o CEP, calcula o peso/dimensões totais e simula (ou chama uma API real de transportadora) o cálculo de frete.
-Backend (ShippingService): Retorna as opções de frete (ShippingOption[]).
-5. Fluxo de Criação de Pedido
-Frontend (Checkout Page): O usuário finaliza o processo de checkout.
-Frontend (axios/fetch): Envia POST para /orders com CreateOrderDto.
-Backend (OrdersModule):
-OrdersController recebe a requisição (protegida por JwtAuthGuard).
-OrdersService.create executa a lógica:
-Obtém o carrinho do CartService.
-Verifica estoque e preços dos produtos (ProductsService).
-Obtém o endereço de entrega (UsersService).
-Cria o pedido e os itens do pedido no DB dentro de uma transação Prisma.
-Decrementa o estoque dos produtos.
-Limpa o carrinho.
-Backend (OrdersService): Retorna o objeto Order criado.
-6. Fluxo de Processamento de Pagamento
-Frontend (Checkout Page): Após a criação do pedido, o frontend pode iniciar o pagamento.
-Frontend (axios/fetch): Envia POST para /payments/process com ProcessPaymentDto (ID do pedido, método de pagamento, detalhes).
-Backend (PaymentsModule):
-PaymentsController recebe a requisição (protegida por JwtAuthGuard).
-PaymentsService.processPayment delega para o provedor de pagamento apropriado (ex: StripeService).
-StripeService (simulado) processa o pagamento.
-PaymentsService atualiza o status do pedido no DB com base no resultado.
-Backend (PaymentsService): Retorna o pedido atualizado com o status do pagamento.
-Webhook (Gateway de Pagamento -> Backend): Para pagamentos assíncronos (Pix, Boleto, ou confirmações de cartão), o gateway de pagamento envia um POST para o endpoint de webhook do backend (ex: /payments/webhook/stripe).
-PaymentsController.handleStripeWebhook recebe e delega para PaymentsService.handleStripeWebhook para processar e atualizar o status do pedido.
+main.ts: Ponto de entrada da aplicação, configura CORS, pipes de validação globais e inicia o servidor.
+app.module.ts: Módulo raiz que agrega todos os outros módulos da aplicação.
+Módulos de Negócio: Cada módulo (AuthModule, UsersModule, ProductsModule, OrdersModule, PaymentsModule, etc.) contém sua própria lógica de negócio, incluindo:
+Controladores (.controller.ts): Responsáveis por lidar com as requisições HTTP, rotear para os serviços apropriados e retornar as respostas.
+Serviços (.service.ts): Contêm a lógica de negócio principal, interagem com o banco de dados (via PrismaService) e com outros serviços.
+DTOs (.dto.ts): Objetos de Transferência de Dados, usados para validação de entrada de dados e tipagem.
+Entidades (.entity.ts): Representações tipadas dos modelos de dados, muitas vezes espelhando os modelos do Prisma.
+Módulos de Infraestrutura/Compartilhados:
+PrismaModule: Encapsula o PrismaService para acesso ao banco de dados.
+ConfigModule: Gerencia as configurações da aplicação (variáveis de ambiente).
+CommonModule: Contém componentes compartilhados como guards, interceptors, filters e constantes globais.
+2. Módulos e Suas Funcionalidades
+2.1. AppModule (app.module.ts, app.controller.ts, app.service.ts)
+Propósito: Módulo raiz que orquestra todos os outros módulos da aplicação.
+Componentes:
+AppController: Define rotas básicas como / (mensagem de boas-vindas) e /health (verificação de saúde da API).
+AppService: Contém a lógica para as rotas básicas do AppController.
+Dependências: Importa e agrega todos os módulos de funcionalidade do e-commerce.
+Funcionalidades Chave: Inicialização da aplicação e rotas de saúde/informação.
+2.2. PrismaModule (prisma.module.ts, prisma.service.ts)
+Propósito: Gerenciar a conexão com o banco de dados via Prisma ORM.
+Componentes:
+PrismaService: Estende PrismaClient e gerencia a conexão e desconexão do banco de dados (hooks de ciclo de vida onModuleInit).
+Dependências: Nenhum módulo importa o PrismaModule diretamente, mas o PrismaService é exportado para ser injetado em outros serviços.
+Funcionalidades Chave:
+onModuleInit(): Conecta ao banco de dados quando o módulo é inicializado.
+enableShutdownHooks(): Garante que a conexão com o banco de dados seja encerrada graciosamente ao desligar a aplicação.
+2.3. ConfigModule (config.module.ts, config.service.ts)
+Propósito: Gerenciar e fornecer acesso às variáveis de ambiente e configurações da aplicação de forma tipada.
+Componentes:
+ConfigService: Um serviço personalizado que envolve o NestConfigService para fornecer acesso a variáveis de ambiente específicas (ex: DATABASE_URL, JWT_SECRET, PAGSEGURO_API_TOKEN).
+Dependências: Usa o NestConfigModule do NestJS. É importado globalmente no AppModule e exporta o ConfigService para que outros módulos possam usá-lo.
+Funcionalidades Chave: Centraliza o acesso às configurações, garantindo que credenciais sensíveis sejam carregadas corretamente e lançando erros se configurações críticas estiverem ausentes.
+2.4. CommonModule (common.module.ts, jwt-auth.guard.ts, current-user.decorator.ts, http-exception.filter.ts, transform.interceptor.ts, app.constants.ts)
+Propósito: Agrupar componentes reutilizáveis e globais que afetam a infraestrutura da aplicação (autenticação, tratamento de erros, formatação de resposta).
+Componentes:
+JwtAuthGuard: Um guard de autenticação que utiliza a estratégia JWT do Passport para proteger rotas.
+CurrentUser: Um decorator personalizado para extrair o objeto de usuário autenticado da requisição.
+HttpExceptionFilter: Um filtro de exceções global que padroniza as respostas de erro HTTP.
+TransformInterceptor: Um interceptor global que envolve as respostas de sucesso em um objeto { data: ... }.
+AppConstants: Uma classe que define constantes globais para a aplicação (ex: valores mínimos para cálculo de frete, limite para frete grátis).
+Dependências: Importa AuthModule (para JwtAuthGuard). Exporta JwtAuthGuard e AppConstants.
+Funcionalidades Chave:
+Gerenciamento de autenticação JWT em rotas protegidas.
+Injeção do usuário autenticado em parâmetros de controlador.
+Tratamento consistente de erros HTTP.
+Padronização da estrutura de resposta da API.
+Centralização de valores constantes.
+2.5. AuthModule (auth.module.ts, auth.controller.ts, auth.service.ts, register-user.dto.ts, login-user.dto.ts, optional-jwt-auth.guard.ts, local-auth.guard.ts, jwt-payload.interface.ts, local.strategy.ts, jwt.strategy.ts)
+Propósito: Lidar com a autenticação de usuários (registro, login, validação de token).
+Componentes:
+AuthController: Define endpoints para registro (/auth/register), login (/auth/login) e obtenção do perfil (/auth/profile).
+AuthService: Contém a lógica de negócio para autenticação: hashing de senhas (bcrypt), validação de credenciais, geração de tokens JWT.
+RegisterUserDto: DTO para validação de dados de registro de usuário.
+LoginUserDto: DTO para validação de dados de login de usuário.
+LocalAuthGuard: Guard para autenticação baseada em nome de usuário/senha (estratégia local).
+JwtAuthGuard (do CommonModule): Guard para autenticação baseada em token JWT.
+OptionalJwtAuthGuard: Uma variação do JwtAuthGuard que não lança erro se o token estiver ausente ou inválido, permitindo rotas que podem ser acessadas por usuários logados ou não.
+LocalStrategy: Estratégia do Passport para autenticação local, valida email e senha.
+JwtStrategy: Estratégia do Passport para autenticação JWT, valida o token e busca o usuário.
+Dependências: Importa UsersModule (para UsersService), PassportModule, JwtModule, ConfigModule. Exporta AuthService e JwtModule.
+Funcionalidades Chave:
+Registro: Cria um novo usuário com senha hashed.
+Login: Valida credenciais e retorna um token JWT.
+Proteção de Rotas: Garante que apenas usuários autenticados (ou opcionalmente autenticados) possam acessar certas rotas.
+JwtPayload: Interface para a estrutura do payload do token JWT.
+2.6. UsersModule (users.module.ts, users.controller.ts, users.service.ts, create-user.dto.ts, update-user.dto.ts, create-address.dto.ts, user.entity.ts)
+Propósito: Gerenciar as operações relacionadas a usuários (CRUD, endereços).
+Componentes:
+UsersController: Define endpoints para criação de usuário (/users), obtenção e atualização do perfil do usuário logado (/users/me), e gerenciamento de endereços (/users/me/addresses).
+UsersService: Contém a lógica de negócio para usuários: criação, busca por email/ID, atualização, remoção (comentada), adição e busca de endereços. Remove a senha do objeto de usuário antes de retornar.
+CreateUserDto: DTO para criação de usuário.
+UpdateUserDto: DTO para atualização parcial de usuário.
+CreateAddressDto: DTO para criação de endereço.
+UserEntity: Entidade que representa um usuário.
+Dependências: Importa PrismaModule. Exporta UsersService para ser usado em outros módulos (ex: AuthModule, OrdersModule).
+Funcionalidades Chave:
+Criação de novos usuários.
+Gestão de perfis de usuário (visualização e edição).
+Gerenciamento de múltiplos endereços por usuário.
+2.7. CategoriesModule (categories.module.ts, categories.controller.ts, categories.service.ts, create-category.dto.ts, update-category.dto.ts, category.entity.ts)
+Propósito: Gerenciar as operações relacionadas a categorias de produtos.
+Componentes:
+CategoriesController: Define endpoints para CRUD de categorias (/categories).
+CategoriesService: Lógica de negócio para categorias: criação, busca (todos/por ID), atualização, remoção.
+CreateCategoryDto: DTO para criação de categoria.
+UpdateCategoryDto: DTO para atualização parcial de categoria.
+CategoryEntity: Entidade que representa uma categoria.
+Dependências: Importa PrismaModule. Exporta CategoriesService para ProductsModule.
+Funcionalidades Chave:
+Criação, listagem, busca por ID, atualização e remoção de categorias.
+2.8. ProductsModule (products.module.ts, products.controller.ts, products.service.ts, create-product.dto.ts, update-product.dto.ts, product-query.dto.ts, product.entity.ts)
+Propósito: Gerenciar as operações relacionadas a produtos.
+Componentes:
+ProductsController: Define endpoints para CRUD de produtos (/products), busca de produtos em destaque (/products/featured) e busca com filtros (/products).
+ProductsService: Lógica de negócio para produtos: busca (todos com filtros, em destaque, por ID), atualização e remoção. A criação e atualização estão marcadas como "ainda não implementadas" no código fornecido.
+CreateProductDto: DTO para criação de produto, incluindo informações como nome, preço, imagem, categoria, estoque, peso e dimensões.
+UpdateProductDto: DTO para atualização parcial de produto.
+ProductQueryDto: DTO para filtros e paginação em listagens de produtos.
+ProductEntity: Entidade que representa um produto, com conversão de tipos Prisma.Decimal para number.
+Dependências: Importa PrismaModule e CategoriesModule. Exporta ProductsService para CartModule, OrdersModule, WishlistModule, InventoryModule.
+Funcionalidades Chave:
+Listagem de produtos com filtros de pesquisa, categoria, cor, tamanho, ordenação e paginação.
+Busca de produtos em destaque.
+Busca de um produto específico por ID.
+Gestão de estoque (embora a atualização seja feita pelo InventoryService).
+2.9. CartModule (cart.module.ts, cart.controller.ts, cart.service.ts, add-to-cart.dto.ts, update-cart-item.dto.ts, cart.entity.ts)
+Propósito: Gerenciar o carrinho de compras de usuários logados e convidados.
+Componentes:
+CartController: Define endpoints para obter o carrinho (/cart), adicionar itens (/cart/items), atualizar quantidade de itens (/cart/items/:productId) e remover itens (/cart/items/:productId).
+CartService: Lógica de negócio para o carrinho: obter/criar carrinho para usuário/convidado, adicionar/atualizar/remover itens, calcular total e quantidade de itens.
+AddToCartDto: DTO para adicionar um produto ao carrinho.
+UpdateCartItemDto: DTO para atualizar a quantidade de um item no carrinho.
+CartEntity, CartItemEntity: Entidades que representam o carrinho e seus itens.
+Dependências: Importa PrismaModule e ProductsModule (para ProductsService). Exporta CartService para OrdersModule.
+Funcionalidades Chave:
+Criação e recuperação de carrinhos para usuários autenticados e convidados.
+Adição de produtos ao carrinho, com validação de estoque e preço.
+Atualização da quantidade de itens no carrinho.
+Remoção de itens do carrinho.
+Cálculo dinâmico do total e contagem de itens no carrinho.
+2.10. WishlistModule (wishlist.module.ts, wishlist.controller.ts, wishlist.service.ts, add-to-wishlist.dto.ts, wishlist.entity.ts)
+Propósito: Gerenciar a lista de desejos dos usuários.
+Componentes:
+WishlistController: Define endpoints para obter a lista de desejos (/wishlist), adicionar itens (/wishlist/items) e remover itens (/wishlist/items/:productId).
+WishlistService: Lógica de negócio para a lista de desejos: obter/criar lista, adicionar/remover itens, com validação para evitar duplicatas.
+AddToWishlistDto: DTO para adicionar um produto à lista de desejos.
+WishlistEntity, WishlistItemEntity: Entidades que representam a lista de desejos e seus itens.
+Dependências: Importa PrismaModule e ProductsModule (para ProductsService).
+Funcionalidades Chave:
+Criação e recuperação da lista de desejos para usuários autenticados.
+Adição de produtos à lista de desejos, prevenindo duplicação.
+Remoção de produtos da lista de desejos.
+2.11. OrdersModule (orders.module.ts, orders.controller.ts, orders.service.ts, create-order.dto.ts, order.entity.ts)
+Propósito: Gerenciar a criação e visualização de pedidos.
+Componentes:
+OrdersController: Define endpoints para criar um pedido (/orders), listar todos os pedidos do usuário (/orders) e obter um pedido específico por ID (/orders/:id). Utiliza OptionalJwtAuthGuard para permitir criação de pedidos por convidados e JwtAuthGuard para listagem/visualização de pedidos de usuários logados.
+OrdersService: Lógica de negócio para pedidos:
+create(): O método mais complexo. Lida com a criação de pedidos para usuários logados e convidados, valida o carrinho, verifica estoque, calcula o valor total, define o endereço de entrega (usando endereço salvo para usuários ou dados do DTO para convidados), e opcionalmente cria uma conta para convidados. Tudo isso é feito dentro de uma transação Prisma para garantir atomicidade.
+findAllByUserId(): Lista todos os pedidos de um usuário.
+findOneByUserId(): Busca um pedido específico para um usuário.
+findOneByGuestId(): Busca um pedido específico para um convidado.
+CreateOrderDto: DTO para criação de pedido, incluindo informações de pagamento, frete, e dados de contato/endereço para convidados.
+OrderEntity, OrderItemEntity: Entidades que representam o pedido e seus itens.
+Dependências: Importa PrismaModule, CartModule, UsersModule, ProductsModule. Exporta OrdersService para PaymentsModule.
+Funcionalidades Chave:
+Processo de checkout unificado para usuários logados e convidados.
+Validação de carrinho e estoque antes da criação do pedido.
+Integração com UsersService para endereços e criação de conta.
+Atualização do estoque dos produtos após a criação do pedido.
+Limpeza do carrinho após a criação bem-sucedida do pedido.
+Transações de banco de dados para garantir a integridade dos dados.
+2.12. PaymentsModule (payments.module.ts, payments.controller.ts, payments.service.ts, process-payment.dto.ts, create-pix-charge.dto.ts, pagseguro.service.ts)
+Propósito: Gerenciar o processamento de pagamentos e a integração com gateways de pagamento (PagSeguro, Stripe - webhook).
+Componentes:
+PaymentsController: Define endpoints para processar pagamentos (/payments/process/:orderId), iniciar checkout PagSeguro (/payments/pagseguro/:orderId/checkout) e lidar com webhooks do Stripe (/payments/webhook/stripe).
+PaymentsService: Lógica de negócio para pagamentos:
+processPayment(): Orquestra o processamento de pagamentos para um pedido. Valida o status do pedido, coleta dados do cliente (usuário logado ou convidado), e chama o serviço de gateway de pagamento apropriado (PagSeguro para PIX/Boleto). Cria uma transação no banco de dados e atualiza o status do pedido.
+createPagSeguroCheckout(): Prepara e inicia o processo de checkout com PagSeguro (PIX ou Boleto), retornando a URL do QR Code ou Boleto.
+handlePagSeguroNotification(): Processa notificações de webhook do PagSeguro, buscando detalhes da transação e atualizando o status do pedido e da transação no banco de dados.
+mapPagSeguroStatusToOrderStatus(): Mapeia os status de pagamento do PagSeguro para os status de pedido internos.
+PagSeguroService: Serviço dedicado à integração com a API do PagSeguro:
+processCreditCardPayment(): Simulação de pagamento com cartão de crédito (foco no PIX).
+generatePixPayment(): Gera uma cobrança PIX via API de Pedidos do PagSeguro, retornando o BR Code, imagem do QR Code e ID da transação.
+generateBoletoPayment(): Simulação de geração de boleto.
+getNotificationDetails(): Busca detalhes de um pedido no PagSeguro para processar webhooks.
+ProcessPaymentDto: DTO para processar um pagamento, especificando o método e dados adicionais (CPF, telefone para PIX).
+CreatePixChargeDto, PixChargeResponseDto: DTOs relacionados à criação e resposta de cobranças PIX (embora CreatePixChargeDto não seja usado diretamente no PaymentsController ou PaymentsService no código fornecido, ele define a estrutura esperada para uma cobrança PIX).
+Dependências: Importa PrismaModule, OrdersModule, ConfigModule.
+Funcionalidades Chave:
+Integração com PagSeguro para pagamentos PIX e Boleto.
+Atualização do status do pedido e criação de transações no banco de dados.
+Tratamento de webhooks para atualização assíncrona do status de pagamento.
+2.13. ShippingModule (shipping.module.ts, shipping.controller.ts, shipping.service.ts, calculate-shipping.dto.ts, correios.interface.ts)
+Propósito: Calcular opções de frete com base no CEP de destino e nos itens do carrinho.
+Componentes:
+ShippingController: Define um endpoint para calcular o frete (/shipping/calculate).
+ShippingService: Lógica de negócio para cálculo de frete:
+calculateShipping(): Valida o CEP, simula uma chamada a uma API de CEP (ViaCEP), calcula informações totais do pacote (peso, dimensões, valor) e aplica uma lógica de cálculo de frete regionalizada (simulando Correios) com base no CEP e peso/valor dos itens.
+getTotalPackageInfo(): Função auxiliar para agregar peso, valor e dimensões dos itens do carrinho.
+CalculateShippingDto: DTO para a requisição de cálculo de frete, incluindo CEP e itens do carrinho com detalhes do produto.
+CorreiosResponse, ShippingOption: Interfaces para tipar a resposta do cálculo de frete.
+Dependências: Importa ConfigModule e ProductsModule.
+Funcionalidades Chave:
+Validação de CEP.
+Cálculo de frete simulado com base em regras regionais e características do pacote.
+Determinação de frete grátis com base em um limite de valor.
+2.14. InventoryModule (inventory.module.ts, inventory.controller.ts, inventory.service.ts, update-stock.dto.ts, stock.entity.ts)
+Propósito: Gerenciar o estoque de produtos.
+Componentes:
+InventoryController: Define endpoints para obter o estoque de um produto (/inventory/:productId) e atualizar o estoque (/inventory/:productId/stock). Protegido por JwtAuthGuard.
+InventoryService: Lógica de negócio para estoque:
+getStock(): Retorna o estoque atual de um produto.
+updateStock(): Atualiza o estoque de um produto para uma quantidade específica.
+decrementStock(): Decrementa o estoque de um produto (usado pelo OrdersService). Inclui validação de estoque insuficiente.
+incrementStock(): Incrementa o estoque de um produto.
+UpdateStockDto: DTO para atualizar a quantidade de estoque.
+StockEntity: Entidade que representa o estoque de um produto.
+Dependências: Importa PrismaModule e ProductsModule (para ProductsService). Exporta InventoryService para ser usado por outros módulos (ex: OrdersModule).
+Funcionalidades Chave:
+Consulta e atualização do estoque de produtos.
+Funções para decrementar e incrementar o estoque de forma segura, com validação de disponibilidade.
+3. Fluxos de Negócio Chave
+3.1. Autenticação e Autorização
+Registro: AuthController.register -> AuthService.register -> UsersService.create. A senha é hashed antes de ser salva.
+Login: AuthController.login (via LocalAuthGuard) -> AuthService.validateUser (valida email e senha) -> AuthService.login (gera JWT).
+Acesso Protegido: Rotas com @UseGuards(JwtAuthGuard) exigem um token JWT válido no cabeçalho Authorization. O JwtAuthGuard usa o JwtStrategy para validar o token e injetar o objeto de usuário (req.user) na requisição, que pode ser acessado via @CurrentUser decorator.
+Acesso Opcional: Rotas com @UseGuards(OptionalJwtAuthGuard) tentam autenticar o usuário, mas permitem que a requisição prossiga mesmo se o token for inválido ou ausente, injetando null no lugar do usuário.
+3.2. Gestão de Produtos e Categorias
+Criação de Categoria: CategoriesController.create -> CategoriesService.create.
+Listagem de Produtos: ProductsController.findAll -> ProductsService.findAll. Permite filtros complexos (busca, categoria, cores, tamanhos) e paginação.
+Detalhes do Produto: ProductsController.findOne -> ProductsService.findOne.
+Produtos em Destaque: ProductsController.findFeatured -> ProductsService.findFeatured.
+3.3. Carrinho de Compras
+Adicionar ao Carrinho: CartController.addItem -> CartService.addItemToCart. Lida com usuários logados (userId) ou convidados (guestId). Verifica a existência do produto e o estoque. Se o item já existe, atualiza a quantidade.
+Atualizar Quantidade: CartController.updateItemQuantity -> CartService.updateItemQuantity. Permite alterar a quantidade de um item existente ou removê-lo se a quantidade for zero.
+Remover do Carrinho: CartController.removeItem -> CartService.removeItemFromCart.
+Obter Carrinho: CartController.getCart -> CartService.getCartForUser (para logados) ou CartService.getCartForGuest (para convidados).
+3.4. Criação de Pedidos (Checkout)
+Início do Pedido: OrdersController.create -> OrdersService.create.
+Lógica de OrdersService.create:
+Obtenção do Carrinho: Identifica se é um usuário logado ou convidado e recupera o carrinho correspondente.
+Validação de Estoque e Preço: Itera sobre os itens do carrinho, verifica a disponibilidade de estoque para cada produto e calcula o totalAmount com base nos preços atuais. Lança exceções se o estoque for insuficiente ou o produto não for encontrado.
+Endereço de Entrega:
+Para usuários logados: Requer shippingAddressId e busca o endereço salvo.
+Para convidados: Requer guestShippingAddress e guestContactInfo no DTO.
+Criação de Conta para Convidado (Opcional): Se shouldCreateAccount for true, cria um novo usuário usando UsersService.create e associa o pedido a este novo usuário.
+Transação Prisma: Todas as operações (criação do pedido, adição de itens, decremento de estoque, limpeza do carrinho) são encapsuladas em uma transação para garantir que, se qualquer passo falhar, todas as alterações sejam revertidas.
+Criação do Pedido e Itens: Persiste o Order e OrderItem no banco de dados.
+Decremento de Estoque: Atualiza o estoque de cada produto no banco de dados.
+Limpeza do Carrinho: Remove todos os itens do carrinho que deu origem ao pedido.
+3.5. Processamento de Pagamentos
+Processar Pagamento: PaymentsController.processPayment -> PaymentsService.processPayment.
+Lógica de PaymentsService.processPayment:
+Obter Pedido: Busca o pedido pelo ID e verifica seu status (PENDING).
+Validação de Dados: Para PIX, exige CPF e telefone do cliente.
+Dados do Cliente: Extrai email e nome completo do usuário logado (order.user) ou do convidado (order.guestEmail, order.guestName).
+Chamar Gateway: Dependendo do paymentMethod (PIX, BOLETO), chama o método correspondente no PagSeguroService.
+Criação de Transação e Atualização de Pedido: Em uma transação Prisma, cria um registro de Transaction e atualiza o status do Order para PROCESSING.
+Início de Checkout PagSeguro: PaymentsController.createPagSeguroCheckout -> PaymentsService.createPagSeguroCheckout. Prepara os dados do pedido e cliente para o PagSeguro e chama generatePixPayment ou generateBoletoPayment, retornando a URL do QR Code ou Boleto.
+Webhook PagSeguro: PaymentsService.handlePagSeguroNotification (chamado por um endpoint de webhook externo, não diretamente no controller fornecido). Busca detalhes da transação no PagSeguro, mapeia o status e atualiza o status da transação e do pedido no banco de dados.
+3.6. Cálculo de Frete
+Calcular Frete: ShippingController.calculateShipping -> ShippingService.calculateShipping.
+Lógica de ShippingService.calculateShipping:
+Validação de CEP: Garante que o CEP seja válido (formato e existência via ViaCEP simulado).
+Informações do Pacote: Agrega peso, valor e dimensões de todos os itens no carrinho.
+Simulação Correios: Aplica regras de preço e prazo de entrega baseadas na região do CEP e nas características do pacote.
+Frete Grátis: Verifica se o valor total do pedido atinge o limite para frete grátis (AppConstants.FREE_SHIPPING_THRESHOLD).
+3.7. Gestão de Estoque
+Obter Estoque: InventoryController.getStock -> InventoryService.getStock.
+Atualizar Estoque: InventoryController.updateStock -> InventoryService.updateStock.
+Decremento/Incremento (Interno): InventoryService.decrementStock e InventoryService.incrementStock são usados por outros serviços (principalmente OrdersService) para gerenciar o estoque de forma transacional e segura.
+4. Interações e Dependências Chave
+PrismaService: É a base de dados, injetado em quase todos os serviços para operações de persistência.
+ConfigService: Usado por serviços como PagSeguroService e ShippingService para acessar variáveis de ambiente (tokens de API, URLs).
+UsersService: Usado por AuthService (registro, validação de usuário) e OrdersService (criação de conta para convidado, busca de endereços).
+ProductsService: Fundamental para CartService, WishlistService, OrdersService e InventoryService para obter detalhes de produtos, validar estoque e preços.
+CartService: Crucial para OrdersService, que consome o carrinho para criar um pedido.
+OrdersService: Consumido por PaymentsService para obter detalhes do pedido antes de processar o pagamento e para atualizar o status do pedido.
+PagSeguroService: Injetado em PaymentsService para lidar com a comunicação com o gateway de pagamento.
+Transações de Banco de Dados: O uso de this.prisma.$transaction em OrdersService.create e PaymentsService.processPayment é vital para garantir a consistência dos dados em operações que envolvem múltiplas etapas de banco de dados (ex: criar pedido, criar itens, decrementar estoque, limpar carrinho).
+5. Considerações para Manutenção
+Modularidade: A separação em módulos facilita a compreensão e o isolamento de funcionalidades. Alterações em um módulo tendem a ter impacto limitado em outros, desde que as interfaces (DTOs, retornos de serviço) sejam mantidas.
+Validação de Dados (DTOs): O uso extensivo de class-validator e class-transformer em DTOs garante que os dados de entrada da API sejam sempre válidos e tipados, reduzindo erros e facilitando a depuração.
+Tratamento de Erros Global (HttpExceptionFilter): Centraliza a forma como os erros são apresentados ao cliente, proporcionando uma experiência de API consistente.
+Interceptors (TransformInterceptor): Padroniza a estrutura de resposta da API, facilitando o consumo pelo frontend.
+Tipagem Forte: O uso de TypeScript em todo o projeto, incluindo entidades e interfaces, melhora a legibilidade, o autocompletar e a detecção de erros em tempo de desenvolvimento.
+Constantes Globais (AppConstants): Centraliza valores mágicos, tornando-os fáceis de encontrar e modificar.
+Simulações de Gateway: As simulações para PagSeguro (cartão/boleto) e Correios indicam pontos onde integrações reais com APIs externas seriam implementadas. Para manutenção, estas seriam as primeiras áreas a serem substituídas por implementações reais.
+Comentários e Logs: O código contém comentários explicativos e logs (Logger) em pontos estratégicos, o que é crucial para entender o fluxo e depurar problemas em produção.
+Esta documentação serve como um guia abrangente para entender a estrutura, o fluxo e a lógica de cada componente do sistema de e-commerce, facilitando a manutenção, a depuração e o desenvolvimento de novas funcionalidades.

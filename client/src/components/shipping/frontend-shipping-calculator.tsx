@@ -8,206 +8,220 @@ import { useToast } from '@/hooks/use-toast';
 import { ProductDimensions } from '@/types/backend';
 
 interface CartItem {
-  id: string;
-  product: {
-    id: string;
-    name: string;
-    price: number;
-    weight?: number;
-    dimensions?: ProductDimensions;
-  };
-  quantity: number;
+  id: string;
+  product: {
+    id: string;
+    name: string;
+    price: number;
+    weight?: number;
+    dimensions?: ProductDimensions;
+  };
+  quantity: number;
 }
 
 interface FrontendShippingCalculatorProps {
-  items: CartItem[];
-  zipCode: string;
-  onZipCodeChange: (zipCode: string) => void;
-  onShippingSelect: (price: number, service: string, deliveryTime: number) => void;
-  selectedService?: string;
+  items: CartItem[];
+  zipCode: string;
+  onZipCodeChange: (zipCode: string) => void;
+  onShippingSelect: (price: number, service: string, deliveryTime: number) => void;
+  selectedService?: string;
 }
 
 export default function FrontendShippingCalculator({
-  items,
-  zipCode,
-  onZipCodeChange,
-  onShippingSelect,
-  selectedService,
+  items,
+  zipCode,
+  onZipCodeChange,
+  onShippingSelect,
+  selectedService,
 }: FrontendShippingCalculatorProps) {
-  const [shouldRecalculate, setShouldRecalculate] = useState(true);
-  const [locationInfo, setLocationInfo] = useState<{ city?: string; state?: string } | null>(null);
-  const { shippingData, isLoading, error, calculateShippingRates, formatZip } = useShippingFrontend();
-  const { toast } = useToast();
+  const [shouldRecalculate, setShouldRecalculate] = useState(true);
+  const [locationInfo, setLocationInfo] = useState<{ city?: string; state?: string } | null>(null);
+  const { shippingData, isLoading, error, calculateShippingRates, formatZip } = useShippingFrontend();
+  const { toast } = useToast();
 
-  const handleCalculateShipping = async () => {
-    if (!zipCode || zipCode.replace(/\D/g, '').length !== 8) {
-      toast({
-        title: "CEP inválido",
-        description: "Por favor, digite um CEP válido com 8 dígitos",
-        variant: "destructive",
-      });
-      return;
-    }
+  const handleCalculateShipping = async () => {
+    if (!zipCode || zipCode.replace(/\D/g, '').length !== 8) {
+      toast({
+        title: "CEP inválido",
+        description: "Por favor, digite um CEP válido com 8 dígitos",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    setShouldRecalculate(false);
+    setShouldRecalculate(false);
 
-    try {
-      const result = await calculateShippingRates({
-        zipCode,
-        items,
-      });
+    try {
+      const result = await calculateShippingRates({
+        zipCode,
+        items,
+      });
+      
+      // CORRIGIDO AQUI: Acessando o resultado através da propriedade 'data'
+      const shippingResult = result?.data;
 
-      // Extrair informações de localização se disponível
-      if (result.options.length > 0 && !result.options[0].error) {
-        // Fazer uma chamada adicional ao ViaCEP para obter cidade/estado
-        try {
-          const cleanZip = zipCode.replace(/\D/g, '');
-          const response = await fetch(`https://viacep.com.br/ws/${cleanZip}/json/`);
-          const locationData = await response.json();
-          if (!locationData.erro) {
-            setLocationInfo({
-              city: locationData.localidade,
-              state: locationData.uf,
-            });
-          }
-        } catch (e) {
-          // Ignore location fetch errors
-        }
-      }
+      // Verificação de segurança para o resultado
+      if (!shippingResult || !shippingResult.options) {
+        console.error('API de cálculo de frete retornou um resultado inválido:', result);
+        toast({
+          title: "Erro no cálculo",
+          description: "Não foi possível calcular o frete. Verifique o CEP e os itens do carrinho.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Extrair informações de localização se disponível
+      if (shippingResult.options.length > 0 && !shippingResult.options[0].error) {
+        // Fazer uma chamada adicional ao ViaCEP para obter cidade/estado
+        try {
+          const cleanZip = zipCode.replace(/\D/g, '');
+          const response = await fetch(`https://viacep.com.br/ws/${cleanZip}/json/`);
+          const locationData = await response.json();
+          if (!locationData.erro) {
+            setLocationInfo({
+              city: locationData.localidade,
+              state: locationData.uf,
+            });
+          }
+        } catch (e) {
+          // Ignore location fetch errors
+        }
+      }
 
-      // Auto-select PAC as default option
-      if (result.options.length > 0 && !selectedService && !result.options[0].error) {
-        const pacOption = result.options.find(opt => opt.service === '41106');
-        const defaultOption = pacOption || result.options[0];
-        onShippingSelect(defaultOption.price, defaultOption.service, defaultOption.deliveryTime);
-      }
+      // Auto-select PAC as default option
+      if (shippingResult.options.length > 0 && !selectedService && !shippingResult.options[0].error) {
+        const pacOption = shippingResult.options.find((opt: any) => opt.service === '41106');
+        const defaultOption = pacOption || shippingResult.options[0];
+        onShippingSelect(defaultOption.price, defaultOption.service, defaultOption.deliveryTime);
+      }
 
-    } catch (error) {
-      console.error('Erro ao calcular frete:', error);
-      toast({
-        title: "Erro no cálculo",
-        description: error instanceof Error ? error.message : "Não foi possível calcular o frete. Tente novamente.",
-        variant: "destructive",
-      });
-    }
-  };
+    } catch (error) {
+      console.error('Erro ao calcular frete:', error);
+      toast({
+        title: "Erro no cálculo",
+        description: error instanceof Error ? error.message : "Não foi possível calcular o frete. Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
 
-  // Auto-calculate when ZIP code changes and is complete
-  useEffect(() => {
-    const cleanZip = zipCode.replace(/\D/g, '');
-    if (cleanZip.length === 8) {
-      setShouldRecalculate(true);
-    }
-  }, [zipCode]);
+  // Auto-calculate when ZIP code changes and is complete
+  useEffect(() => {
+    const cleanZip = zipCode.replace(/\D/g, '');
+    if (cleanZip.length === 8) {
+      setShouldRecalculate(true);
+    }
+  }, [zipCode]);
 
-  useEffect(() => {
-    if (shouldRecalculate && zipCode && !isLoading) {
-      const timer = setTimeout(() => {
-        handleCalculateShipping();
-      }, 500); // Debounce
-      
-      return () => clearTimeout(timer);
-    }
-  }, [shouldRecalculate, zipCode]);
+  useEffect(() => {
+    if (shouldRecalculate && zipCode && !isLoading) {
+      const timer = setTimeout(() => {
+        handleCalculateShipping();
+      }, 500); // Debounce
+      
+      return () => clearTimeout(timer);
+    }
+  }, [shouldRecalculate, zipCode]);
 
-  const handleZipCodeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatZip(e.target.value);
-    onZipCodeChange(formatted);
-  };
+  const handleZipCodeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatZip(e.target.value);
+    onZipCodeChange(formatted);
+  };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-2">
-        <div className="flex-1">
-          <Label htmlFor="shipping-zipcode" className="font-montserrat">
-            CEP para calcular frete
-          </Label>
-          <Input
-            id="shipping-zipcode"
-            placeholder="00000-000"
-            value={zipCode}
-            onChange={handleZipCodeInput}
-            maxLength={9}
-            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat"
-          />
-          {locationInfo && (
-            <div className="flex items-center gap-1 mt-1 text-xs text-gray-600">
-              <MapPin className="h-3 w-3" />
-              <span className="font-montserrat">
-                {locationInfo.city}, {locationInfo.state}
-              </span>
-            </div>
-          )}
-        </div>
-        <Button
-          onClick={handleCalculateShipping}
-          disabled={isLoading || !zipCode}
-          variant="outline"
-          className="self-end"
-        >
-          {isLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            "Calcular"
-          )}
-        </Button>
-      </div>
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <Label htmlFor="shipping-zipcode" className="font-montserrat">
+            CEP para calcular frete
+          </Label>
+          <Input
+            id="shipping-zipcode"
+            placeholder="00000-000"
+            value={zipCode}
+            onChange={handleZipCodeInput}
+            maxLength={9}
+            className="border-gray-200 focus:border-gray-500 focus:ring-gray-500 font-montserrat"
+          />
+          {locationInfo && (
+            <div className="flex items-center gap-1 mt-1 text-xs text-gray-600">
+              <MapPin className="h-3 w-3" />
+              <span className="font-montserrat">
+                {locationInfo.city}, {locationInfo.state}
+              </span>
+            </div>
+          )}
+        </div>
+        <Button
+          onClick={handleCalculateShipping}
+          disabled={isLoading || !zipCode}
+          variant="outline"
+          className="self-end"
+        >
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            "Calcular"
+          )}
+        </Button>
+      </div>
 
-      {error && (
-        <div className="text-xs text-red-700 bg-red-50 p-3 rounded-lg border border-red-200">
-          ❌ {error}
-        </div>
-      )}
+      {error && (
+        <div className="text-xs text-red-700 bg-red-50 p-3 rounded-lg border border-red-200">
+          ❌ {error}
+        </div>
+      )}
 
-      {shippingData && !error && (
-        <div className="space-y-2">
-          <Label className="font-montserrat text-sm font-semibold">
-            Opções de entrega:
-          </Label>
-          {shippingData.options.map((option) => (
-            <div
-              key={option.service}
-              className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                selectedService === option.service
-                  ? 'border-gray-900 bg-gray-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              } ${option.error ? 'border-red-200 bg-red-50' : ''}`}
-              onClick={() => !option.error && onShippingSelect(option.price, option.service, option.deliveryTime)}
-            >
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <Truck className={`h-4 w-4 ${option.error ? 'text-red-600' : 'text-gray-600'}`} />
-                  <span className={`font-semibold font-montserrat ${option.error ? 'text-red-700' : ''}`}>
-                    {option.serviceName}
-                  </span>
-                </div>
-                {!option.error && (
-                  <span className="font-bold text-gray-900 font-montserrat">
-                    R$ {option.price.toFixed(2)}
-                  </span>
-                )}
-              </div>
-              {!option.error && (
-                <div className="flex items-center gap-1 mt-1 text-sm text-gray-600">
-                  <Clock className="h-3 w-3" />
-                  <span className="font-montserrat">
-                    {option.deliveryTime} dia{option.deliveryTime !== 1 ? 's' : ''} úteis
-                  </span>
-                </div>
-              )}
-              {option.error && (
-                <div className="mt-2 text-xs text-red-600 font-montserrat">
-                  {option.error}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      {shippingData && shippingData.options && !error && (
+        <div className="space-y-2">
+          <Label className="font-montserrat text-sm font-semibold">
+            Opções de entrega:
+          </Label>
+          {shippingData.options.map((option) => (
+            <div
+              key={option.service}
+              className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                selectedService === option.service
+                  ? 'border-gray-900 bg-gray-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              } ${option.error ? 'border-red-200 bg-red-50' : ''}`}
+              onClick={() => !option.error && onShippingSelect(option.price, option.service, option.deliveryTime)}
+            >
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <Truck className={`h-4 w-4 ${option.error ? 'text-red-600' : 'text-gray-600'}`} />
+                  <span className={`font-semibold font-montserrat ${option.error ? 'text-red-700' : ''}`}>
+                    {option.serviceName}
+                  </span>
+                </div>
+                {!option.error && (
+                  <span className="font-bold text-gray-900 font-montserrat">
+                    R$ {option.price.toFixed(2)}
+                  </span>
+                )}
+              </div>
+              {!option.error && (
+                <div className="flex items-center gap-1 mt-1 text-sm text-gray-600">
+                  <Clock className="h-3 w-3" />
+                  <span className="font-montserrat">
+                    {option.deliveryTime} dia{option.deliveryTime !== 1 ? 's' : ''} úteis
+                  </span>
+                </div>
+              )}
+              {option.error && (
+                <div className="mt-2 text-xs text-red-600 font-montserrat">
+                  {option.error}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
-      <div className="text-xs text-blue-700 bg-blue-50 p-3 rounded-lg border border-blue-200">
-        ℹ️ Escolha uma opção de frete para finalizar sua compra
-      </div>
-    </div>
-  );
+      <div className="text-xs text-blue-700 bg-blue-50 p-3 rounded-lg border border-blue-200">
+        ℹ️ Escolha uma opção de frete para finalizar sua compra
+      </div>
+    </div>
+  );
 }

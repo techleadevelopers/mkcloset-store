@@ -13,10 +13,52 @@ import WhatsAppButton from '@/components/ui/whatsapp-button';
 import FrontendShippingCalculator from '@/components/shipping/frontend-shipping-calculator';
 import { useLocation } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
-import { Address, Order, ProcessPaymentDto, PaymentMethod } from '@/types/backend';
+import { apiRequest, getOrCreateGuestId } from '@/lib/queryClient';
+import { Address, Order, PaymentMethod, User, PixChargeResponseDto } from '@/types/backend'; // Importação corrigida do DTO
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Skeleton } from '@/components/ui/skeleton';
+
+// Resposta esperada ao iniciar o checkout de redirecionamento do PagSeguro
+interface PagSeguroRedirectResponse {
+  redirectUrl: string;
+}
+
+// Tipos para dados de convidado (ajuste conforme seu backend espera)
+interface GuestContactInfo {
+  name: string;
+  email: string;
+  phone: string;
+  cpf?: string;
+}
+
+interface GuestShippingAddress {
+  street: string;
+  number: string;
+  complement?: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  zipCode: string;
+}
+
+// Estendendo o tipo do createOrderMutation para incluir dados de convidado
+interface CreateOrderPayload {
+  shippingAddressId?: string;
+  paymentMethod: PaymentMethod;
+  shippingService: string;
+  shippingPrice: number;
+  guestId?: string;
+  guestContactInfo?: GuestContactInfo;
+  guestShippingAddress?: GuestShippingAddress;
+  shouldCreateAccount?: boolean;
+  guestPassword?: string;
+}
+
+// Adicionando um tipo para a resposta esperada da criação do pedido,
+// considerando o TransformInterceptor do backend.
+interface CreateOrderResponse {
+  data: Order;
+}
 
 export default function Checkout() {
   const [, setLocation] = useLocation();
@@ -29,30 +71,73 @@ export default function Checkout() {
   const [shippingPrice, setShippingPrice] = useState<number>(0);
   const [selectedShippingService, setSelectedShippingService] = useState<string | null>(null);
   const [shippingDeliveryTime, setShippingDeliveryTime] = useState<number>(0);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CREDIT_CARD');
-  const [cpf, setCpf] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX'); // Padrão agora é PIX
 
-  // 1. Buscar endereços do usuário
+  // --- Novos estados para dados de convidado ---
+  const [guestName, setGuestName] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
+  const [guestCpf, setGuestCpf] = useState('');
+  const [guestStreet, setGuestStreet] = useState('');
+  const [guestNumber, setGuestNumber] = useState('');
+  const [guestComplement, setGuestComplement] = useState('');
+  const [guestNeighborhood, setGuestNeighborhood] = useState('');
+  const [guestCity, setGuestCity] = useState('');
+  const [guestState, setGuestState] = useState('');
+  const [guestZipCode, setGuestZipCode] = useState('');
+  const [shouldCreateAccount, setShouldCreateAccount] = useState(false);
+  const [guestPassword, setGuestPassword] = useState('');
+  // --- Fim dos novos estados ---
+
+  // NOVO: Estados para a tela de pagamento PIX
+  const [pixData, setPixData] = useState<PixChargeResponseDto | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
+
+  const isUserAuthenticated = !!localStorage.getItem('access_token');
+
+  const [shippingCalculatorZipCode, setShippingCalculatorZipCode] = useState('');
+
+  // 1. Buscar endereços do usuário (apenas se autenticado)
   const { data: addresses, isLoading: isLoadingAddresses, error: addressesError } = useQuery<Address[], Error>({
     queryKey: ['userAddresses'],
     queryFn: async () => {
       const res = await apiRequest('GET', '/users/me/addresses');
       return res.json();
     },
-    enabled: !!localStorage.getItem('access_token'),
+    enabled: isUserAuthenticated,
+  });
+  const selectedAddress = addresses?.find(addr => addr.id === selectedAddressId);
+  
+  // NOVO: Buscar dados do usuário autenticado para o nome do titular do cartão
+  const { data: authenticatedUser } = useQuery<User, Error>({
+    queryKey: ['authenticatedUser'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/users/me');
+      return res.json();
+    },
+    enabled: isUserAuthenticated,
   });
 
-  // Efeito colateral para definir o endereço padrão quando os dados chegam com sucesso
   useEffect(() => {
-    if (addresses && addresses.length > 0 && !selectedAddressId) {
-      const defaultAddress = addresses.find(addr => addr.isDefault) || addresses[0];
-      if (defaultAddress) {
-        setSelectedAddressId(defaultAddress.id);
+    if (isUserAuthenticated) {
+      if (addresses && addresses.length > 0 && !selectedAddressId) {
+        const defaultAddress = addresses.find(addr => addr.isDefault) || addresses[0];
+        if (defaultAddress) {
+          setSelectedAddressId(defaultAddress.id);
+          setShippingCalculatorZipCode(defaultAddress.zipCode);
+        }
       }
+    } else {
+      setShippingCalculatorZipCode(guestZipCode);
     }
-  }, [addresses, selectedAddressId]);
+  }, [isUserAuthenticated, addresses, selectedAddressId, guestZipCode]);
   
-  // Efeito colateral para lidar com erros da requisição
+  useEffect(() => {
+    if (isUserAuthenticated && selectedAddress) {
+      setShippingCalculatorZipCode(selectedAddress.zipCode);
+    }
+  }, [isUserAuthenticated, selectedAddress]);
+
   useEffect(() => {
     if (addressesError) {
       console.error("Erro ao carregar endereços:", addressesError);
@@ -60,17 +145,8 @@ export default function Checkout() {
     }
   }, [addressesError, toast]);
 
-  const selectedAddress = addresses?.find(addr => addr.id === selectedAddressId);
-  const [zipCode, setZipCode] = useState(selectedAddress?.zipCode || '');
-
-  useEffect(() => {
-    if (selectedAddress) {
-      setZipCode(selectedAddress.zipCode);
-    }
-  }, [selectedAddress]);
-
-  // 2. Mutação para criar o pedido
-  const createOrderMutation = useMutation<Order, Error, { shippingAddressId: string; paymentMethod: PaymentMethod; shippingService: string; shippingPrice: number }>({
+  // Mutação para criar o pedido no backend
+  const createOrderMutation = useMutation<CreateOrderResponse, Error, CreateOrderPayload>({
     mutationFn: async (orderData) => {
       const res = await apiRequest('POST', '/orders', orderData);
       return res.json();
@@ -80,70 +156,118 @@ export default function Checkout() {
     },
   });
 
-  // 3. Mutação para processar o pagamento
-  const processPaymentMutation = useMutation<Order, Error, { orderId: string, paymentData: ProcessPaymentDto }>({
-    mutationFn: async ({ orderId, paymentData }) => {
-      const res = await apiRequest('POST', `/payments/process/${orderId}`, paymentData);
+  // REMOVIDO: a mutation de redirecionamento.
+  
+  // NOVA MUTATION: Para criar uma cobrança PIX no backend
+  const createPixChargeMutation = useMutation<PixChargeResponseDto, Error, { orderId: string }>({
+    mutationFn: async ({ orderId }) => {
+      const res = await apiRequest('POST', `/payments/pix-charge/${orderId}`);
       return res.json();
     },
-    onSuccess: (order: Order) => {
-      toast({ title: "Pagamento processado!", description: `Seu pedido #${order.id} foi finalizado.` });
-      clearCart();
-      queryClient.invalidateQueries({ queryKey: ['cart'] });
-      queryClient.invalidateQueries({ queryKey: ['userAddresses'] });
-      setLocation(`/order-success?orderId=${order.id}`);
-    },
     onError: (error: Error) => {
-      toast({ title: "Erro ao processar pagamento", description: error.message || "Ocorreu um erro ao processar o pagamento.", variant: "destructive" });
+      toast({ title: "Erro ao criar cobrança PIX", description: error.message || "Ocorreu um erro ao gerar o pagamento PIX.", variant: "destructive" });
     },
   });
 
   const handlePlaceOrder = async () => {
-    if (!localStorage.getItem('access_token')) {
-      toast({ title: "Erro", description: "Você precisa estar logado para finalizar a compra.", variant: "destructive" });
-      setLocation('/login');
-      return;
-    }
-
     if (cartItems.length === 0) {
       toast({ title: "Erro", description: "Seu carrinho está vazio.", variant: "destructive" });
       setLocation('/products');
       return;
     }
     
-    if (!selectedAddressId) {
-      toast({ title: "Erro", description: "Por favor, selecione um endereço de entrega.", variant: "destructive" });
-      return;
+    // Validações antes de enviar o pedido
+    if (isUserAuthenticated) {
+      if (!selectedAddressId) {
+        toast({ title: "Erro", description: "Por favor, selecione um endereço de entrega.", variant: "destructive" });
+        return;
+      }
+    } else {
+      if (!guestName || !guestEmail || !guestPhone || !guestCpf || !guestStreet || !guestNumber || !guestNeighborhood || !guestCity || !guestState || !guestZipCode) {
+        toast({ title: "Erro", description: "Por favor, preencha todos os dados de contato e endereço.", variant: "destructive" });
+        return;
+      }
+      const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/;
+      if (guestPhone && !phoneRegex.test(guestPhone)) {
+        toast({ title: "Erro", description: "Por favor, insira um número de telefone válido (ex: (DD) 9XXXX-XXXX).", variant: "destructive" });
+        return;
+      }
+      if (shouldCreateAccount && !guestPassword) {
+        toast({ title: "Erro", description: "Por favor, defina uma senha para criar sua conta.", variant: "destructive" });
+        return;
+      }
     }
+
     if (!selectedShippingService || shippingPrice === 0) {
       toast({ title: "Erro", description: "Por favor, selecione uma opção de frete.", variant: "destructive" });
       return;
     }
 
     try {
-      const newOrder = await createOrderMutation.mutateAsync({
-        shippingAddressId: selectedAddressId,
+      const orderPayload: CreateOrderPayload = {
         paymentMethod,
         shippingService: selectedShippingService,
-        shippingPrice,
-      });
-
-      if (!newOrder.id) {
-        throw new Error('Não foi possível obter o ID do pedido.');
-      }
-
-      const paymentData: ProcessPaymentDto = {
-        paymentMethod,
-        clientCpf: cpf || undefined,
+        shippingPrice: shippingPrice,
       };
 
-      await processPaymentMutation.mutateAsync({
-        orderId: newOrder.id,
-        paymentData,
-      });
+      if (isUserAuthenticated) {
+        orderPayload.shippingAddressId = selectedAddressId!;
+      } else {
+        orderPayload.guestId = getOrCreateGuestId();
+        orderPayload.guestContactInfo = {
+          name: guestName,
+          email: guestEmail,
+          phone: guestPhone,
+          cpf: guestCpf,
+        };
+        orderPayload.guestShippingAddress = {
+          street: guestStreet,
+          number: guestNumber,
+          complement: guestComplement,
+          neighborhood: guestNeighborhood,
+          city: guestCity,
+          state: guestState,
+          zipCode: guestZipCode,
+        };
+        if (shouldCreateAccount) {
+          orderPayload.shouldCreateAccount = true;
+          orderPayload.guestPassword = guestPassword;
+        }
+      }
+
+      // 1. Criar o pedido no backend
+      const newOrderResponse = await createOrderMutation.mutateAsync(orderPayload);
+      const newOrder = newOrderResponse.data;
+
+      if (!newOrder || !newOrder.id) {
+        throw new Error('Não foi possível obter o ID do pedido.');
+      }
+      
+      setOrderId(newOrder.id);
+
+      // NOVO: Se o método de pagamento for PIX, criamos a cobrança e mostramos a tela.
+      if (paymentMethod === 'PIX') {
+        const pixChargeData = await createPixChargeMutation.mutateAsync({ orderId: newOrder.id });
+        setPixData(pixChargeData);
+      } else {
+        // Se for outro método (como Cartão de Crédito ou Boleto),
+        // mantemos o fluxo de redirecionamento, mas a mutation é diferente
+        const pagSeguroRedirectData = await apiRequest('POST', `/payments/initiate-checkout/${newOrder.id}`).then(res => res.json());
+        if (pagSeguroRedirectData.redirectUrl) {
+          window.location.href = pagSeguroRedirectData.redirectUrl;
+        } else {
+          throw new Error('Falha ao obter URL de redirecionamento do PagSeguro.');
+        }
+      }
+
+      // A limpeza do carrinho é movida para o final do fluxo.
+      clearCart();
+      queryClient.invalidateQueries({ queryKey: ['cart'] });
+      queryClient.invalidateQueries({ queryKey: ['userAddresses'] });
 
     } catch (error) {
       console.error(error);
+      toast({ title: "Erro ao finalizar pedido", description: error instanceof Error ? error.message : "Ocorreu um erro ao finalizar seu pedido.", variant: "destructive" });
     }
   };
 
@@ -155,9 +279,25 @@ export default function Checkout() {
 
   const nextStep = () => {
     if (currentStep === 1) {
-      if (!selectedAddressId) {
-        toast({ title: "Erro", description: "Por favor, selecione um endereço de entrega.", variant: "destructive" });
-        return;
+      if (isUserAuthenticated) {
+        if (!selectedAddressId) {
+          toast({ title: "Erro", description: "Por favor, selecione um endereço de entrega.", variant: "destructive" });
+          return;
+        }
+      } else {
+        if (!guestName || !guestEmail || !guestPhone || !guestCpf || !guestStreet || !guestNumber || !guestNeighborhood || !guestCity || !guestState || !guestZipCode) {
+          toast({ title: "Erro", description: "Por favor, preencha todos os dados de contato e endereço.", variant: "destructive" });
+          return;
+        }
+        const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/;
+        if (guestPhone && !phoneRegex.test(guestPhone)) {
+            toast({ title: "Erro", description: "Por favor, insira um número de telefone válido (ex: (DD) 9XXXX-XXXX).", variant: "destructive" });
+            return;
+        }
+        if (shouldCreateAccount && !guestPassword) {
+          toast({ title: "Erro", description: "Por favor, defina uma senha para criar sua conta.", variant: "destructive" });
+          return;
+        }
       }
       if (!selectedShippingService || shippingPrice === 0) {
         toast({ title: "Erro", description: "Por favor, selecione uma opção de frete.", variant: "destructive" });
@@ -180,15 +320,11 @@ export default function Checkout() {
       toast({ title: "Carrinho Vazio", description: "Adicione produtos ao carrinho para continuar." });
       setLocation('/products');
     }
-    if (!localStorage.getItem('access_token') && !isLoadingAddresses) {
-      toast({ title: "Acesso Negado", description: "Você precisa estar logado para acessar o checkout." });
-      setLocation('/login');
-    }
-  }, [isLoadingCart, cartItems.length, isLoadingAddresses, setLocation, toast]);
+  }, [isLoadingCart, cartItems.length, addresses, setLocation, toast]);
 
-  const isPlacingOrder = createOrderMutation.isPending || processPaymentMutation.isPending;
+  const isPlacingOrder = createOrderMutation.isPending || createPixChargeMutation.isPending;
 
-  if (isLoadingCart || isLoadingAddresses || cartItems.length === 0 || !localStorage.getItem('access_token')) {
+  if (isLoadingCart || (isUserAuthenticated && isLoadingAddresses) || cartItems.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-montserrat">
         <Header />
@@ -199,6 +335,82 @@ export default function Checkout() {
           <Skeleton className="h-12 w-48 mx-auto" />
         </div>
         <Footer />
+      </div>
+    );
+  }
+
+  // NOVA TELA: Exibir QR Code se os dados do Pix estiverem disponíveis
+  if (pixData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-montserrat flex items-center justify-center p-4">
+        <Card className="w-full max-w-lg mx-auto shadow-2xl border-0">
+          <CardHeader className="text-center">
+            <CardTitle className="text-3xl font-bold text-gray-800 font-playfair">
+              Pagamento com PIX
+            </CardTitle>
+            <p className="text-gray-600 font-montserrat">
+              Escaneie o QR Code ou copie o código para finalizar seu pagamento.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-6 text-center">
+            {/* QR Code */}
+            {pixData.qrCodeImage ? (
+              <div className="flex justify-center">
+                <img src={pixData.qrCodeImage} alt="QR Code PIX" className="w-64 h-64 border-2 rounded-lg" />
+              </div>
+            ) : (
+              <div className="bg-gray-200 w-64 h-64 flex items-center justify-center rounded-lg text-gray-500">
+                <p>QR Code não disponível.</p>
+              </div>
+            )}
+            
+            {/* Código "Copia e Cola" */}
+            <div className="space-y-2">
+              <Label htmlFor="brCode" className="font-semibold text-gray-800">
+                Código Copia e Cola
+              </Label>
+              <div className="relative">
+                <Input
+                  id="brCode"
+                  value={pixData.brCode}
+                  readOnly
+                  className="pr-12 text-center overflow-ellipsis overflow-hidden"
+                />
+                <Button
+                  className="absolute right-1 top-1 h-8 w-10 text-xs"
+                  onClick={() => {
+                    document.execCommand('copy');
+                    toast({
+                      title: "Copiado!",
+                      description: "O código Pix foi copiado para a área de transferência.",
+                    });
+                  }}
+                >
+                  Copiar
+                </Button>
+              </div>
+            </div>
+
+            {/* Informações adicionais */}
+            <div className="text-sm text-gray-600 space-y-1">
+              <p>
+                Valor: <span className="font-semibold text-gray-900">R$ {pixData.amount.toFixed(2)}</span>
+              </p>
+              <p>
+                Expira em: <span className="font-semibold">{new Date(pixData.expiresAt).toLocaleTimeString()}</span>
+              </p>
+            </div>
+            
+            <p className="text-xs text-gray-500 mt-4">
+              Acompanhe o status do seu pedido pelo seu e-mail.
+            </p>
+
+            <Button onClick={() => setLocation('/orders')} className="w-full">
+              Ver Meus Pedidos
+            </Button>
+
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -245,28 +457,112 @@ export default function Checkout() {
                 {currentStep === 1 && (
                   <div className="space-y-6">
                     <h3 className="text-lg font-semibold font-playfair">1. Endereço de Entrega</h3>
-                    <RadioGroup value={selectedAddressId || undefined} onValueChange={setSelectedAddressId}>
-                      {addresses && addresses.length === 0 ? (
+                    
+                    {isUserAuthenticated ? (
+                      addresses && addresses.length === 0 ? (
                         <div className="p-4 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-700">
                           Você ainda não possui endereços cadastrados. Por favor, adicione um em seu perfil.
                         </div>
                       ) : (
-                        addresses?.map((addr: Address) => (
-                          <div key={addr.id} className="flex items-center space-x-2 p-3 border rounded-md">
-                            <RadioGroupItem value={addr.id} id={`address-${addr.id}`} />
-                            <Label htmlFor={`address-${addr.id}`} className="flex flex-col">
-                              <span className="font-medium">{addr.street}, {addr.number} {addr.complement && `- ${addr.complement}`}</span>
-                              <span className="text-sm text-gray-600">{addr.neighborhood}, {addr.city} - {addr.state}, {addr.zipCode}</span>
-                            </Label>
+                        <RadioGroup value={selectedAddressId || undefined} onValueChange={setSelectedAddressId}>
+                          {addresses?.map((addr: Address) => (
+                            <div key={addr.id} className="flex items-center space-x-2 p-3 border rounded-md">
+                              <RadioGroupItem value={addr.id} id={`address-${addr.id}`} />
+                              <Label htmlFor={`address-${addr.id}`} className="flex flex-col">
+                                <span className="font-medium">{addr.street}, {addr.number} {addr.complement && `- ${addr.complement}`}</span>
+                                <span className="text-sm text-gray-600">{addr.neighborhood}, {addr.city} - {addr.state}, {addr.zipCode}</span>
+                              </Label>
+                            </div>
+                          ))}
+                        </RadioGroup>
+                      )
+                    ) : ( // Formulário para usuários convidados
+                      <div className="space-y-4">
+                        <p className="text-sm text-gray-600">Preencha seus dados para a entrega:</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="guestName">Nome Completo</Label>
+                            <Input id="guestName" type="text" value={guestName} onChange={(e) => setGuestName(e.target.value)} />
                           </div>
-                        ))
-                      )}
-                    </RadioGroup>
+                          <div>
+                            <Label htmlFor="guestEmail">Email</Label>
+                            <Input id="guestEmail" type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} />
+                          </div>
+                          <div>
+                            <Label htmlFor="guestPhone">Telefone</Label>
+                            <Input id="guestPhone" type="tel" value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} />
+                          </div>
+                          <div>
+                            <Label htmlFor="guestCpf">CPF</Label>
+                            <Input id="guestCpf" type="text" value={guestCpf} onChange={(e) => setGuestCpf(e.target.value)} />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="guestStreet">Rua</Label>
+                            <Input id="guestStreet" type="text" value={guestStreet} onChange={(e) => setGuestStreet(e.target.value)} />
+                          </div>
+                          <div>
+                            <Label htmlFor="guestNumber">Número</Label>
+                            <Input id="guestNumber" type="text" value={guestNumber} onChange={(e) => setGuestNumber(e.target.value)} />
+                          </div>
+                        </div>
+                        <div>
+                          <Label htmlFor="guestComplement">Complemento (opcional)</Label>
+                          <Input id="guestComplement" type="text" value={guestComplement} onChange={(e) => setGuestComplement(e.target.value)} />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="guestNeighborhood">Bairro</Label>
+                            <Input id="guestNeighborhood" type="text" value={guestNeighborhood} onChange={(e) => setGuestNeighborhood(e.target.value)} />
+                          </div>
+                          <div>
+                            <Label htmlFor="guestCity">Cidade</Label>
+                            <Input id="guestCity" type="text" value={guestCity} onChange={(e) => setGuestCity(e.target.value)} />
+                          </div>
+                          <div>
+                            <Label htmlFor="guestState">Estado</Label>
+                            <Input id="guestState" type="text" value={guestState} onChange={(e) => setGuestState(e.target.value)} />
+                          </div>
+                          <div>
+                            <Label htmlFor="guestZipCode">CEP</Label>
+                            <Input id="guestZipCode" type="text" value={guestZipCode} onChange={(e) => {
+                              setGuestZipCode(e.target.value);
+                              setShippingCalculatorZipCode(e.target.value);
+                            }} />
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2 mt-4">
+                          <input
+                            type="checkbox"
+                            id="create-account"
+                            checked={shouldCreateAccount}
+                            onChange={(e) => setShouldCreateAccount(e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+                          />
+                          <Label htmlFor="create-account" className="text-sm font-medium text-gray-700">
+                            Quero criar uma conta para acompanhar meu pedido
+                          </Label>
+                        </div>
+                        {shouldCreateAccount && (
+                          <div className="mt-4">
+                            <Label htmlFor="guestPassword">Defina uma Senha</Label>
+                            <Input
+                              id="guestPassword"
+                              type="password"
+                              value={guestPassword}
+                              onChange={(e) => setGuestPassword(e.target.value)}
+                              placeholder="********"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <Separator />
 
                     <h3 className="text-lg font-semibold font-playfair">2. Opções de Frete</h3>
-                    {selectedAddress ? (
+                    {(isUserAuthenticated && selectedAddress) || (!isUserAuthenticated && shippingCalculatorZipCode) ? (
                       <FrontendShippingCalculator
                         items={cartItems.map(item => ({
                           id: item.id,
@@ -274,13 +570,13 @@ export default function Checkout() {
                           product: {
                             id: item.product.id,
                             name: item.product.name,
-                            price: item.product.price,
+                            price: parseFloat(item.product.price.toString()),
                             weight: item.product.weight || undefined,
                             dimensions: item.product.dimensions || undefined,
                           }
                         }))}
-                        zipCode={zipCode}
-                        onZipCodeChange={setZipCode}
+                        zipCode={shippingCalculatorZipCode}
+                        onZipCodeChange={setShippingCalculatorZipCode}
                         onShippingSelect={(price, service, deliveryTime) => {
                           setShippingPrice(price);
                           setSelectedShippingService(service);
@@ -289,59 +585,42 @@ export default function Checkout() {
                         selectedService={selectedShippingService || undefined}
                       />
                     ) : (
-                      <p className="text-gray-600">Selecione um endereço para calcular o frete.</p>
+                      <p className="text-gray-600">Selecione um endereço ou preencha o CEP para calcular o frete.</p>
                     )}
                   </div>
                 )}
 
                 {currentStep === 2 && (
                   <div className="space-y-6">
+                    <div className="flex justify-center mb-4">
+                      <img src="/pagseguro.png" alt="Pagamentos via PagSeguro" className="max-w-[150px]" />
+                    </div>
+                    
                     <h3 className="text-lg font-semibold font-playfair text-center">3. Método de Pagamento</h3>
+                    <p className="text-sm text-gray-600 text-center">Escolha sua forma de pagamento para continuar.</p>
                     
                     <RadioGroup value={paymentMethod} onValueChange={(value: PaymentMethod) => setPaymentMethod(value)}>
                       <div className="flex items-center space-x-2 p-3 border rounded-md">
-                        <RadioGroupItem value="CREDIT_CARD" id="payment-credit-card" />
-                        <Label htmlFor="payment-credit-card">Cartão de Crédito</Label>
-                      </div>
-                      <div className="flex items-center space-x-2 p-3 border rounded-md">
                         <RadioGroupItem value="PIX" id="payment-pix" />
                         <Label htmlFor="payment-pix">PIX</Label>
+                      </div>
+                      <div className="flex items-center space-x-2 p-3 border rounded-md">
+                        <RadioGroupItem value="CREDIT_CARD" id="payment-credit-card" />
+                        <Label htmlFor="payment-credit-card">Cartão de Crédito</Label>
                       </div>
                       <div className="flex items-center space-x-2 p-3 border rounded-md">
                         <RadioGroupItem value="BOLETO" id="payment-boleto" />
                         <Label htmlFor="payment-boleto">Boleto Bancário</Label>
                       </div>
                     </RadioGroup>
-
-                    {paymentMethod === 'CREDIT_CARD' && (
-                      <div className="mt-4 p-4 border rounded-md bg-gray-50">
+                    <div className="mt-4 p-4 border rounded-md bg-gray-50">
                         <p className="text-sm text-gray-700">
-                          Para uma integração real de cartão de crédito, você usaria um SDK de gateway de pagamento (ex: PagSeguro Checkout Transparente) aqui para coletar os dados do cartão de forma segura e gerar um token.
-                        </p>
-                        <p className="text-sm text-gray-700 mt-2">
-                          Por enquanto, o pagamento será simulado no backend.
+                          {paymentMethod === 'PIX'
+                            ? 'Você receberá um QR Code e um código Copia e Cola para pagar o pedido.'
+                            : 'Você será redirecionado para o PagSeguro para concluir seu pagamento.'
+                          }
                         </p>
                       </div>
-                    )}
-
-                    {paymentMethod === 'PIX' && (
-                      <div className="mt-4 p-4 space-y-4 border rounded-md bg-gray-50">
-                        <p className="text-sm text-gray-700">
-                          Ao finalizar o pedido, um QR Code PIX será gerado para pagamento. Por favor, insira seu CPF para emissão da cobrança.
-                        </p>
-                        <div>
-                          <Label htmlFor="cpf" className="font-semibold text-sm">CPF do Pagador</Label>
-                          <Input
-                            id="cpf"
-                            type="text"
-                            placeholder="000.000.000-00"
-                            value={cpf}
-                            onChange={(e) => setCpf(e.target.value)}
-                            className="mt-1"
-                          />
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
 
@@ -349,11 +628,33 @@ export default function Checkout() {
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold font-playfair">4. Revisar Pedido</h3>
                     <div className="space-y-4 p-4 bg-gray-50 rounded-lg font-montserrat">
-                      <h4 className="font-semibold">Endereço de Entrega:</h4>
-                      {selectedAddress ? (
+                      <h4 className="font-semibold">Informações de Contato:</h4>
+                      {isUserAuthenticated ? (
+                        <>
+                          <p>Usuário logado: {authenticatedUser?.name || authenticatedUser?.email}</p>
+                          <p>Email: {authenticatedUser?.email}</p>
+                          <p>Telefone: {authenticatedUser?.phone || 'N/A'}</p>
+                          <p>CPF: {authenticatedUser?.cpf || 'N/A'}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p>Nome: {guestName}</p>
+                          <p>Email: {guestEmail}</p>
+                          <p>Telefone: {guestPhone}</p>
+                          <p>CPF: {guestCpf}</p>
+                        </>
+                      )}
+
+                      <h4 className="font-semibold mt-4">Endereço de Entrega:</h4>
+                      {isUserAuthenticated && selectedAddress ? (
                         <>
                           <p>{selectedAddress.street}, {selectedAddress.number} {selectedAddress.complement && `- ${selectedAddress.complement}`}</p>
                           <p>{selectedAddress.neighborhood}, {selectedAddress.city} - {selectedAddress.state}, {selectedAddress.zipCode}</p>
+                        </>
+                      ) : !isUserAuthenticated ? (
+                        <>
+                          <p>{guestStreet}, {guestNumber} {guestComplement && `- ${guestComplement}`}</p>
+                          <p>{guestNeighborhood}, {guestCity} - {guestState}, {guestZipCode}</p>
                         </>
                       ) : (
                         <p>Nenhum endereço selecionado.</p>
@@ -420,7 +721,7 @@ export default function Checkout() {
                   {cartItems.map((item) => (
                     <div key={item.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
                       <img
-                        src={item.product.imageUrl}
+                        src={item.product.images?.[0] || 'https://placehold.co/600x800/e2e8f0/ffffff?text=Sem+Imagem'}
                         alt={item.product.name}
                         className="w-14 h-14 object-cover rounded-lg bg-white shadow-sm"
                       />

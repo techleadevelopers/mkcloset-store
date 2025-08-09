@@ -1,6 +1,6 @@
 import { X, CreditCard, ArrowRight, ShoppingBag, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetOverlay } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetOverlay, SheetDescription } from '@/components/ui/sheet'; // Importe SheetDescription
 import { Separator } from '@/components/ui/separator';
 import { useCart } from '@/hooks/use-cart';
 import { useUIStore } from '@/lib/store';
@@ -33,6 +33,10 @@ export default function ShoppingCart() {
               <X className="h-4 w-4" />
             </Button>
           </div>
+          {/* Adicione SheetDescription aqui para acessibilidade */}
+          <SheetDescription className="sr-only">
+            Conteúdo do seu carrinho de compras, incluindo itens e total.
+          </SheetDescription>
         </SheetHeader>
 
         <div className="flex flex-col h-full">

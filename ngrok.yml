@@ -1,0 +1,9 @@
+version: 2
+authtoken: 313yU3pYj6xatjkHVSxogXzUUpS_71xGsTKSQv1Mg12SKUczM # Este é o seu authtoken correto
+tunnels:
+  frontend:
+    addr: 5173
+    proto: http
+  backend:
+    addr: 3000
+    proto: http

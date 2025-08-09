@@ -1,182 +1,447 @@
-// src/pages/products.tsx
+// pages/product-detail.tsx
 
 import { useState, useEffect } from 'react';
-import { useLocation, useRoute } from 'wouter';
-import { Filter, Grid, List } from 'lucide-react';
+import { useRoute, useLocation } from 'wouter';
+import { Heart, ShoppingBag, Star, Truck, Shield, RotateCcw, ArrowLeft, Plus, Minus, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import Header from '@/components/layout/header';
 import Footer from '@/components/layout/footer';
 import ProductCard from '@/components/product/product-card';
-import ShoppingCart from '@/components/cart/shopping-cart';
 import WhatsAppButton from '@/components/ui/whatsapp-button';
+import ShoppingCart from '@/components/cart/shopping-cart';
+import CartNotification from '@/components/ui/cart-notification';
+import { useCart } from '@/hooks/use-cart';
+import { useWishlist } from '@/hooks/use-wishlist';
+import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { Product, Category } from '@/types/backend'; // Importa as interfaces do backend
+import { Product } from '@/types/backend'; // Importa a interface Product do backend
+import { cn } from '@/lib/utils';
 
-export default function Products() {
-  const [location] = useLocation();
-  const [sortBy, setSortBy] = useState('default');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+export default function ProductDetail() {
+  const [, params] = useRoute('/product/:id');
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const productId = params?.id; // ID agora é string
 
-  // Parse URL parameters
-  const [, params] = useRoute('/products/:category');
-  const categorySlug = params?.category;
-  const urlParams = new URLSearchParams(location.split('?')[1] || '');
-  const searchQuery = urlParams.get('search');
-  const featured = urlParams.get('featured');
+  const [selectedSize, setSelectedSize] = useState<string>('');
+  const [selectedColor, setSelectedColor] = useState<string>('');
+  const [quantity, setQuantity] = useState(1);
+  const [justAdded, setJustAdded] = useState(false);
+  const [showNotification, setShowNotification] = useState(false);
 
-  // Query para buscar categorias
-  const { data: categories, isLoading: isLoadingCategories } = useQuery<Category[]>({
-    queryKey: ['categories'],
+  const { addToCart, items } = useCart();
+  const { isInWishlist, toggleWishlist } = useWishlist();
+
+  // Query para buscar o produto principal
+  const { data: product, isLoading: isLoadingProduct, isError: isErrorProduct } = useQuery<Product>({
+    queryKey: ['product', productId],
     queryFn: async () => {
-      const res = await apiRequest('GET', '/categories');
-      return res.json();
+      if (!productId) {
+        console.error('[product-detail] Erro: ID do produto não fornecido na URL.');
+        throw new Error("ID do produto não fornecido.");
+      }
+      
+      try {
+        console.log(`[product-detail] Tentando buscar produto com ID: ${productId}`);
+        const res = await apiRequest('GET', `/products/${productId}`);
+        const json = await res.json();
+        console.log('[product-detail] Resposta da API para o produto:', json);
+
+        if (!json.id) {
+          throw new Error("Produto não encontrado.");
+        }
+        return json;
+      } catch (error) {
+        console.error('[product-detail] Erro ao buscar dados do produto:', error);
+        throw error;
+      }
     },
-    staleTime: 1000 * 60 * 60, // 1 hora de cache
+    enabled: !!productId, // Só executa a query se productId existir
+    staleTime: 1000 * 60 * 5, // 5 minutos de cache
   });
 
-  const selectedCategory = categories?.find(cat => cat.slug === categorySlug);
-
-  // Query para buscar produtos
-  const { data: products, isLoading: isLoadingProducts } = useQuery<Product[]>({
-    queryKey: ['products', selectedCategory?.id, searchQuery, featured, sortBy], // Query key dinâmica para re-fetch
+  // Query para buscar produtos relacionados (pela mesma categoria)
+  const { data: relatedProducts, isLoading: isLoadingRelatedProducts } = useQuery<Product[]>({
+    queryKey: ['relatedProducts', product?.categoryId, product?.id],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (selectedCategory?.id) {
-        params.append('categoryId', selectedCategory.id);
-      }
-      if (searchQuery) {
-        params.append('search', searchQuery);
-      }
-      if (featured) {
-        params.append('isFeatured', 'true'); // Backend espera boolean como string
-      }
-      if (sortBy && sortBy !== 'default') {
-        params.append('sortBy', sortBy);
-      }
-      const res = await apiRequest('GET', `/products?${params.toString()}`);
-      return res.json();
+      if (!product?.categoryId) return [];
+      const res = await apiRequest('GET', `/products?categoryId=${product.categoryId}`);
+      // Filtra o próprio produto e limita a 4
+      return res.json().then((prods: Product[]) => prods.filter(p => p.id !== product.id).slice(0, 4));
     },
-    staleTime: 1000 * 60 * 2, // 2 minutos de cache para produtos
+    enabled: !!product?.categoryId, // Só executa se o produto principal e sua categoria existirem
+    staleTime: 1000 * 60 * 5,
   });
 
-  const getPageTitle = () => {
-    if (searchQuery) return `Resultados para "${searchQuery}"`;
-    if (featured) return 'Produtos em Destaque';
-    if (selectedCategory) return selectedCategory.name;
-    return 'Todos os Produtos';
+  useEffect(() => {
+    if (product) {
+      // Definir tamanho e cor padrão se disponíveis
+      if (product.sizes.length > 0 && !selectedSize) setSelectedSize(product.sizes[0]);
+      if (product.colors.length > 0 && !selectedColor) setSelectedColor(product.colors[0]);
+    }
+  }, [product, selectedSize, selectedColor]);
+
+  const isInCart = items.some(item => item.productId === productId);
+  const isInWish = product ? isInWishlist(product.id) : false;
+
+  const handleAddToCart = async () => {
+    if (!product) return;
+
+    // Adicionar validação de seleção de tamanho/cor se obrigatório
+    if (product.sizes.length > 0 && !selectedSize) {
+      toast({ title: "Erro", description: "Por favor, selecione um tamanho.", variant: "destructive" });
+      return;
+    }
+    if (product.colors.length > 0 && !selectedColor) {
+      toast({ title: "Erro", description: "Por favor, selecione uma cor.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      await addToCart(product.id, selectedSize, selectedColor, quantity);
+      setJustAdded(true);
+      setShowNotification(true);
+      
+      toast({
+        title: "✅ Produto adicionado",
+        description: `${product.name} foi adicionado ao carrinho com sucesso`,
+        duration: 3000,
+      });
+
+      setTimeout(() => {
+        setJustAdded(false);
+      }, 3000);
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Falha ao adicionar produto ao carrinho",
+        variant: "destructive",
+      });
+    }
   };
 
-  const totalProducts = products?.length || 0;
+  const handleWishlistToggle = () => {
+    if (!product) return;
+    toggleWishlist(product.id);
+  };
+
+  if (isLoadingProduct) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Header />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            <div className="space-y-4">
+              <Skeleton className="w-full aspect-square rounded-2xl" />
+              <div className="grid grid-cols-4 gap-2">
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className="aspect-square rounded-lg" />
+                ))}
+              </div>
+            </div>
+            <div className="space-y-6">
+              <Skeleton className="h-8 w-3/4" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-12 w-1/3" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (isErrorProduct || !product) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Header />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Produto não encontrado</h1>
+          <Button 
+            onClick={() => setLocation('/products')}
+            className="bg-gray-900 hover:bg-black text-white rounded-xl"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Voltar à loja
+          </Button>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  const isOnSale = product.originalPrice && product.originalPrice > product.price;
+  const discount = isOnSale ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) : 0;
 
   return (
-    <div className="min-h-screen bg-white">
-      <Header />
+    <>
+      <CartNotification 
+        isVisible={showNotification}
+        product={product}
+        onClose={() => setShowNotification(false)}
+      />
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Page Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{getPageTitle()}</h1>
-          <p className="text-gray-600">
-            {isLoadingProducts ? 'Carregando...' : `${totalProducts} produto${totalProducts !== 1 ? 's' : ''} encontrado${totalProducts !== 1 ? 's' : ''}`}
-          </p>
-        </div>
-
-        {/* Filters and Sort */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 space-y-4 sm:space-y-0">
-          <div className="flex items-center space-x-4">
-            <Button variant="outline" size="sm" className="border-gray-200 hover:bg-gray-50">
-              <Filter className="h-4 w-4 mr-2" />
-              Filtros
-            </Button>
-          </div>
-
-          <div className="flex items-center space-x-4">
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-48 border-gray-200">
-                <SelectValue placeholder="Ordenar por" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="default">Ordem Padrão</SelectItem>
-                <SelectItem value="name">Nome A-Z</SelectItem>
-                <SelectItem value="price-low">Menor preço</SelectItem>
-                <SelectItem value="price-high">Maior preço</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <div className="flex border border-gray-200 rounded-lg">
-              <Button
-                variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setViewMode('grid')}
-                className={`rounded-r-none ${viewMode === 'grid' ? 'bg-gray-900 text-white' : 'hover:bg-gray-50'}`}
-              >
-                <Grid className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={viewMode === 'list' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setViewMode('list')}
-                className={`rounded-l-none ${viewMode === 'list' ? 'bg-gray-900 text-white' : 'hover:bg-gray-50'}`}
-              >
-                <List className="h-4 w-4" />
-              </Button>
-            </div>
+      <div className="min-h-screen bg-white">
+        <Header />
+        
+        {/* Breadcrumb */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center space-x-2 text-sm text-gray-500">
+            <button onClick={() => setLocation('/')} className="hover:text-gray-900">
+              Início
+            </button>
+            <span>/</span>
+            <button onClick={() => setLocation('/products')} className="hover:text-gray-900">
+              Produtos
+            </button>
+            <span>/</span>
+            <span className="text-gray-900">{product.name}</span>
           </div>
         </div>
 
-        {/* Products Grid */}
-        {isLoadingProducts ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="space-y-4">
-                <Skeleton className="w-full aspect-[3/4] rounded-lg" />
-                <Skeleton className="h-5 w-3/4" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-6 w-1/2" />
+        {/* Product Details */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            {/* Product Images */}
+            <div className="space-y-4">
+              <div className="relative aspect-square bg-gray-100 rounded-2xl overflow-hidden">
+                <img
+                  src={product.images?.[0] || 'https://placehold.co/600x800/e2e8f0/ffffff?text=Sem+Imagem'}
+                  alt={product.name}
+                  className="w-full h-full object-cover"
+                />
+                {isOnSale && (
+                  <Badge className="absolute top-4 left-4 bg-red-500 text-white">
+                    -{discount}%
+                  </Badge>
+                )}
+                {product.isNew && (
+                  <Badge className="absolute top-4 right-4 bg-green-500 text-white">
+                    Novo
+                  </Badge>
+                )}
               </div>
-            ))}
-          </div>
-        ) : totalProducts === 0 ? (
-          <div className="text-center py-16">
-            <div className="text-gray-400 mb-4">
-              <svg className="mx-auto h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6-4h6m2 5.291A7.962 7.962 0 0112 15c-2.34 0-4.47-.881-6.08-2.33" />
-              </svg>
+              {/* Miniaturas de imagem */}
+              {product.images && product.images.length > 0 && (
+                <div className="grid grid-cols-4 gap-2">
+                  {product.images.map((img, index) => (
+                    <div key={index} className="aspect-square bg-gray-100 rounded-lg overflow-hidden cursor-pointer">
+                      <img src={img} alt={`${product.name} - ${index + 1}`} className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Nenhum produto encontrado</h3>
-            <p className="text-gray-600 mb-6">
-              {searchQuery 
-                ? 'Tente ajustar sua busca ou navegar pelas categorias'
-                : 'Esta categoria ainda não possui produtos disponíveis'
-              }
-            </p>
-            <Button onClick={() => window.history.back()}>
-              Voltar
-            </Button>
-          </div>
-        ) : (
-          <div className={
-            viewMode === 'grid' 
-              ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8"
-              : "space-y-6"
-          }>
-            {products?.map((product) => (
-              <ProductCard 
-                key={product.id} 
-                product={product}
-                className={viewMode === 'list' ? 'flex-row max-w-2xl' : ''}
-              />
-            ))}
-          </div>
-        )}
-      </div>
 
-      <Footer />
-      <ShoppingCart />
-      <WhatsAppButton />
-    </div>
+            {/* Product Info */}
+            <div className="space-y-6">
+              {/* Title and Price */}
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.name}</h1>
+                <p className="text-gray-600 mb-4">{product.description}</p>
+                
+                <div className="flex items-center space-x-3 mb-4">
+                  <span className="text-3xl font-bold text-gray-900">
+                    R$ {product.price.toFixed(2)}
+                  </span>
+                  {isOnSale && (
+                    <span className="text-xl text-gray-500 line-through">
+                      R$ {product.originalPrice!.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+
+                {/* Rating (mockado) */}
+                <div className="flex items-center space-x-1 mb-6">
+                  {[...Array(5)].map((_, i) => (
+                    <Star
+                      key={i}
+                      className={`w-5 h-5 ${i < 4 ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}
+                    />
+                  ))}
+                  <span className="text-sm text-gray-500 ml-2">(4.0) • 156 avaliações</span>
+                </div>
+              </div>
+
+              {/* Size Selection */}
+              {product.sizes && product.sizes.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3">Tamanho</h3>
+                  <div className="flex space-x-2">
+                    {product.sizes.map((size) => (
+                      <Button
+                        key={size}
+                        variant={selectedSize === size ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setSelectedSize(size)}
+                        className={cn(
+                          "rounded-lg",
+                          selectedSize === size 
+                            ? "bg-gray-900 hover:bg-black text-white" 
+                            : "border-gray-300 hover:border-gray-400"
+                        )}
+                      >
+                        {size}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Color Selection */}
+              {product.colors && product.colors.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3">Cor: {selectedColor}</h3>
+                  <div className="flex space-x-3">
+                    {product.colors.map((color) => (
+                      <button
+                        key={color}
+                        onClick={() => setSelectedColor(color)}
+                        className={cn(
+                          "w-8 h-8 rounded-full border-2 transition-all",
+                          selectedColor === color 
+                            ? "border-gray-900 scale-110" 
+                            : "border-gray-300 hover:border-gray-400"
+                        )}
+                        style={{
+                          backgroundColor: 
+                            color.toLowerCase() === 'preto' ? '#000000' :
+                            color.toLowerCase() === 'branco' ? '#ffffff' :
+                            color.toLowerCase() === 'cinza' ? '#6b7280' :
+                            color.toLowerCase() === 'azul' ? '#3b82f6' :
+                            color.toLowerCase() === 'rosa' ? '#ec4899' :
+                            color.toLowerCase() === 'verde' ? '#10b981' :
+                            color.toLowerCase() === 'bordo' ? '#800020' : // Adicionado Bordo
+                            color.toLowerCase() === 'off white' ? '#f5f5dc' : // Adicionado Off White
+                            color.toLowerCase() === 'vinho' ? '#7c2d12' :
+                            color.toLowerCase() === 'camel' ? '#d2691e' :
+                            color.toLowerCase() === 'bege' ? '#f5f5dc' :
+                            '#6b7280' // Cor padrão
+                        }}
+                        title={color}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quantity */}
+              <div>
+                <h3 className="font-semibold mb-3">Quantidade</h3>
+                <div className="flex items-center space-x-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    disabled={quantity <= 1}
+                  >
+                    <Minus className="w-4 h-4" />
+                  </Button>
+                  <span className="w-12 text-center font-semibold">{quantity}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setQuantity(quantity + 1)}
+                    disabled={quantity >= product.stock}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+                <p className="text-sm text-gray-500 mt-2">
+                  {product.stock} unidades disponíveis
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-4">
+                <div className="flex space-x-4">
+                  <Button
+                    onClick={handleAddToCart}
+                    disabled={justAdded || quantity > product.stock || quantity <= 0}
+                    className={cn(
+                      "flex-1 py-4 text-lg font-semibold rounded-xl transition-all duration-500",
+                      justAdded 
+                        ? 'bg-green-600 hover:bg-green-600 text-white scale-105' 
+                        : isInCart
+                        ? 'bg-gray-600 hover:bg-gray-700 text-white'
+                        : 'bg-gray-900 hover:bg-black text-white hover:scale-105'
+                    )}
+                  >
+                    {justAdded ? (
+                      <Check className="w-5 h-5 mr-2 animate-bounce" />
+                    ) : isInCart ? (
+                      <Check className="w-5 h-5 mr-2" />
+                    ) : (
+                      <ShoppingBag className="w-5 h-5 mr-2" />
+                    )}
+                    {justAdded ? 'Adicionado!' : isInCart ? 'No Carrinho' : 'Adicionar ao Carrinho'}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={handleWishlistToggle}
+                    className="px-4 py-4 rounded-xl border-gray-300 hover:border-gray-400"
+                  >
+                    <Heart className={cn(
+                      "w-5 h-5",
+                      isInWish ? "fill-red-500 text-red-500" : "text-gray-600"
+                    )} />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Features */}
+              <div className="border-t pt-6">
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="flex items-center space-x-3">
+                    <Truck className="w-5 h-5 text-gray-400" />
+                    <span className="text-sm text-gray-600">
+                      Frete grátis para compras acima de R$ 199
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <RotateCcw className="w-5 h-5 text-gray-400" />
+                    <span className="text-sm text-gray-600">
+                      30 dias para trocas e devoluções
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <Shield className="w-5 h-5 text-gray-400" />
+                    <span className="text-sm text-gray-600">
+                      Compra 100% segura e protegida
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Related Products */}
+          {relatedProducts && relatedProducts.length > 0 && (
+            <div className="mt-16">
+              <h2 className="text-2xl font-bold text-gray-900 mb-8">Produtos Relacionados</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {relatedProducts.map((relatedProduct) => (
+                  <ProductCard 
+                    key={relatedProduct.id} 
+                    product={relatedProduct}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <ShoppingCart />
+        <WhatsAppButton />
+        <Footer />
+      </div>
+    </>
   );
 }

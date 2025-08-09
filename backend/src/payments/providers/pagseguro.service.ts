@@ -1,17 +1,66 @@
+// src/payments/providers/pagseguro.service.ts
 import { Injectable, BadRequestException, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config'; // Importe o ConfigService padrão do NestJS
-import axios from 'axios'; // Importar axios para fazer as requisições HTTP
+import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
+import { Prisma } from '@prisma/client';
+import { PixChargeResponseDto } from '../dto/create-pix-charge.dto';
+import { Decimal } from '@prisma/client/runtime/library';
 
-// Tipagem auxiliar para os detalhes do cliente e do pedido
-interface PagSeguroPixDetails {
-  orderId: string;
-  amount: number; // Será convertido para Prisma.Decimal no PaymentsService
+// Interface para os detalhes de um item no checkout do PagSeguro
+interface PagSeguroCheckoutItem {
+  reference_id?: string; // ID de referência do item (opcional)
+  name: string;
+  quantity: number;
+  unit_amount: number; // Valor em centavos
+}
+
+// Interface para os detalhes do cliente no checkout do PagSeguro
+interface PagSeguroCheckoutCustomer {
+  name: string;
+  email: string;
+  tax_id: string; // CPF
+  phones: Array<{
+    country: string;
+    area: string;
+    number: string;
+    type: 'MOBILE' | 'HOME' | 'BUSINESS';
+  }>;
+}
+
+// Interface para o endereço no checkout do PagSeguro
+interface PagSeguroCheckoutAddress {
+  country: string;
+  region_code: string; // Estado (ex: SP)
+  city: string;
+  postal_code: string; // CEP
+  street: string;
+  number: string;
+  locality: string; // Bairro
+  complement?: string | null;
+}
+
+// Interface para os detalhes de envio no checkout do PagSeguro
+interface PagSeguroCheckoutShipping {
+  address: PagSeguroCheckoutAddress;
+  type: 'FIXED' | 'FREE' | 'WEIGHT'; // Tipo de frete
+  service_type: string; // Serviço de frete (ex: SEDEX, PAC)
+  amount: number; // Custo do frete em centavos
+  estimated_delivery_time_in_days?: number;
+  address_modifiable?: boolean; // Se o cliente pode modificar o endereço na página do PagSeguro
+}
+
+// Interface para os detalhes necessários para criar um checkout de redirecionamento
+interface CreatePagSeguroCheckoutRedirectDetails {
+  orderId: string; // Seu ID de pedido interno, usado como reference_id
+  amount: Prisma.Decimal; // Valor total do pedido, incluindo frete
   description: string;
-  clientEmail: string;
-  clientFullName: string;
-  clientPhone?: string | null;
-  clientCpf?: string | null;
-  clientAddress?: {
+  customer: {
+    email: string;
+    fullName: string;
+    phone?: string | null;
+    cpf?: string | null;
+  };
+  shippingAddress: {
     cep: string;
     street: string;
     number: string;
@@ -19,191 +68,351 @@ interface PagSeguroPixDetails {
     neighborhood: string;
     city: string;
     state: string;
-  } | null;
-  notificationUrl: string; // URL do webhook da sua aplicação
+  };
+  shippingService: string;
+  shippingPrice: Prisma.Decimal;
+  items: Array<{
+    name: string;
+    quantity: number;
+    unit_amount: Prisma.Decimal; // Preço unitário do item
+  }>;
 }
+
+// Interface para os detalhes necessários para criar uma cobrança PIX
+interface CreatePagSeguroPixChargeDetails {
+  orderId: string;
+  amount: Prisma.Decimal;
+  description: string;
+  customer: {
+    email: string;
+    fullName: string;
+    phone?: string | null;
+    cpf?: string | null;
+  };
+  shippingAddress: {
+    cep: string;
+    street: string;
+    number: string;
+    complement?: string | null;
+    neighborhood: string;
+    city: string;
+    state: string;
+  };
+  shippingService: string;
+  shippingPrice: Prisma.Decimal;
+  items: Array<{
+    name: string;
+    quantity: number;
+    unit_amount: Prisma.Decimal;
+  }>;
+}
+
 
 @Injectable()
 export class PagSeguroService {
   private readonly logger = new Logger(PagSeguroService.name);
-  private pagSeguroApiUrl: string;
+  private pagSeguroBaseApiUrl: string; // URL base da API (sem /checkouts)
   private pagSeguroToken: string;
+  private pagSeguroEmail: string; // Email da conta PagSeguro, se necessário para alguma API
+  private redirectBaseUrl: string; // URL base do frontend (ngrok)
+  private notificationBaseUrl: string; // URL base do backend (ngrok)
 
   constructor(private configService: ConfigService) {
-    // Obtenha as credenciais do PagSeguro do seu ConfigService usando o método get()
-    this.pagSeguroApiUrl = this.configService.get<string>('PAGSEGURO_API_URL') || 'https://sandbox.api.pagseguro.com';
-    const pagSeguroToken = this.configService.get<string>('PAGSEGURO_API_TOKEN');
+    // Carrega a URL base da API do PagSeguro (ex: https://sandbox.api.pagseguro.com)
+    this.pagSeguroBaseApiUrl = this.configService.get<string>('PAGSEGURO_API_URL') || 'https://sandbox.api.pagseguro.com';
+    this.pagSeguroToken = this.configService.get<string>('PAGSEGURO_API_TOKEN')!;
+    this.pagSeguroEmail = this.configService.get<string>('PAGSEGURO_EMAIL')!; // Pode ser necessário para APIs mais antigas ou específicas
 
-    if (!pagSeguroToken) {
-      this.logger.error('PAGSEGURO_API_TOKEN não configurado. As integrações com PagSeguro não funcionarão.');
-      throw new InternalServerErrorException('Credenciais do PagSeguro não configuradas.');
+    // Carrega as URLs do ngrok do .env
+    this.redirectBaseUrl = this.configService.get<string>('FRONTEND_URL')!; // Usando FRONTEND_URL
+    this.notificationBaseUrl = this.configService.get<string>('BACKEND_URL')!; // Usando BACKEND_URL
+
+    // Validação de configuração
+    if (!this.pagSeguroToken || !this.redirectBaseUrl || !this.notificationBaseUrl) {
+      this.logger.error('Credenciais e/ou URLs do PagSeguro não configuradas corretamente. Verifique PAGSEGURO_API_TOKEN, FRONTEND_URL, BACKEND_URL no seu .env.');
+      throw new InternalServerErrorException('Credenciais e/ou URLs do PagSeguro não configuradas.');
     }
-    this.pagSeguroToken = pagSeguroToken;
   }
 
-  /**
-   * Simula ou processa um pagamento com cartão de crédito via PagSeguro.
-   * A lógica real para a API de Pedidos do PagSeguro seria diferente da comentada.
-   * Mantido como simulado por enquanto, pois o foco é PIX.
-   */
-  async processCreditCardPayment(amount: number, paymentDetails: any, orderId: string, userId: string): Promise<any> {
-    this.logger.log(`Simulando processamento de cartão de crédito PagSeguro para o pedido ${orderId}: ${amount}`);
-    // A integração real com a API de Pedidos do PagSeguro para cartão de crédito
-    // exigiria um payload diferente e tratamento de tokenização no frontend.
-    return { status: 'PENDING', transactionId: `ps_sim_cc_${Date.now()}`, message: 'Pagamento de cartão em análise.' };
+  // Este método createSession parece ser para uma API mais antiga do PagSeguro (V2)
+  // Se você está usando a API V4 (como sugere 'x-api-version': '4.0'),
+  // talvez não precise dele para o fluxo de checkout de redirecionamento.
+  // Mantenho-o aqui, mas com a URL correta para V2.
+  async createSession() {
+    const sessionUrl = `https://ws.sandbox.pagseguro.uol.com.br/v2/sessions?email=${this.pagSeguroEmail}&token=${this.pagSeguroToken}`;
+    
+    try {
+      const response = await axios.post(sessionUrl);
+      // O retorno pode precisar ser parseado de XML para JSON, dependendo da API V2
+      this.logger.log(`[PagSeguroService] Sessão PagSeguro criada: ${JSON.stringify(response.data)}`);
+      return response.data; // Retorna o ID da sessão
+    } catch (error) {
+      this.logger.error('Erro ao criar sessão no PagSeguro:', error.message);
+      if (axios.isAxiosError(error) && error.response) {
+        this.logger.error(`[PagSeguroService] Dados do erro da API PagSeguro (sessão): ${JSON.stringify(error.response.data)}`);
+      }
+      throw new InternalServerErrorException('Falha ao criar sessão no PagSeguro.');
+    }
   }
 
-  /**
-   * Gera um QR Code Pix via PagSeguro utilizando a API de Pedidos (/orders).
-   * @param details Objeto contendo todos os dados necessários para a cobrança PIX.
-   */
-  async generatePixPayment(details: PagSeguroPixDetails): Promise<any> {
-    this.logger.log(`[PagSeguroService] Gerando PIX para o pedido ${details.orderId} com valor ${details.amount}`);
+  // NOVO: Método para criar uma cobrança PIX
+  async createPagSeguroPixCharge(details: CreatePagSeguroPixChargeDetails): Promise<PixChargeResponseDto> {
+    this.logger.log(`[PagSeguroService] Criando cobrança PIX para o pedido ${details.orderId}`);
 
-    const url = `${this.pagSeguroApiUrl}/orders`;
+    const cleanedPhone = details.customer.phone ? details.customer.phone.replace(/\D/g, '') : '';
+    let customerPhoneArea: string;
+    let customerPhoneNumber: string;
+    let customerPhoneType: 'MOBILE' | 'HOME' | 'BUSINESS';
+
+    if (cleanedPhone.length >= 10) {
+        customerPhoneArea = cleanedPhone.substring(0, 2);
+        customerPhoneNumber = cleanedPhone.substring(2);
+        customerPhoneType = customerPhoneNumber.length === 9 ? 'MOBILE' : 'HOME';
+    } else {
+        this.logger.warn(`[PagSeguroService] Telefone do cliente (${details.customer.phone}) é inválido. Usando fallback.`);
+        customerPhoneArea = '11'; 
+        customerPhoneNumber = '999999999';
+        customerPhoneType = 'MOBILE';
+    }
+
+    const customerTaxId = (details.customer.cpf || '30061150827').replace(/\D/g, ''); 
+    const finalCustomerTaxId = customerTaxId.length === 11 ? customerTaxId : '30061150827';
+
+    const itemsPayload: PagSeguroCheckoutItem[] = details.items.map(item => ({
+      name: item.name,
+      quantity: item.quantity,
+      unit_amount: Math.round(item.unit_amount.toNumber() * 100),
+    }));
+
+    const payload = {
+      reference_id: details.orderId,
+      customer: {
+        name: details.customer.fullName,
+        email: details.customer.email,
+        tax_id: finalCustomerTaxId,
+        phones: [{
+          country: '55',
+          area: customerPhoneArea,
+          number: customerPhoneNumber,
+          type: customerPhoneType,
+        }],
+      },
+      items: itemsPayload,
+      charges: [{
+        reference_id: details.orderId,
+        description: details.description,
+        amount: { value: Math.round(details.amount.toNumber() * 100) },
+        payment_method: {
+          type: 'PIX',
+          expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hora de expiração
+        },
+      }],
+      notification_urls: [`${this.notificationBaseUrl}/payments/webhook/pagseguro`],
+    };
+
+    this.logger.debug(`[PagSeguroService] Enviando payload para PagSeguro (${this.pagSeguroBaseApiUrl}/orders): ${JSON.stringify(payload)}`);
 
     try {
-      // ATENÇÃO: Em produção, garanta que clientCpf, clientPhone e dados de endereço sejam reais e válidos.
-      // Os valores padrão abaixo são apenas para simulação/desenvolvimento ou caso os dados sejam opcionais.
-      const customerTaxId = details.clientCpf || '30061150827'; // CPF de teste ou um CPF válido do cliente
-      const customerPhoneArea = details.clientPhone ? details.clientPhone.substring(0, 2) : '11';
-      const customerPhoneNumber = details.clientPhone && details.clientPhone.length >= 11 ? details.clientPhone.substring(2) : '999999999';
-
-      const addressPayload: any = {
-        street: details.clientAddress?.street || 'Rua Teste',
-        number: details.clientAddress?.number || '123',
-        locality: details.clientAddress?.neighborhood || 'Bairro Teste',
-        city: details.clientAddress?.city || 'Cidade Teste',
-        region_code: details.clientAddress?.state || 'SP',
-        country: 'BRA',
-        postal_code: details.clientAddress?.cep || '00000000',
-      };
-
-      if (details.clientAddress?.complement && details.clientAddress.complement.trim() !== '') {
-        addressPayload.complement = details.clientAddress.complement;
-      }
-
-      const payload = {
-        reference_id: details.orderId,
-        customer: {
-          name: details.clientFullName,
-          email: details.clientEmail,
-          tax_id: customerTaxId,
-          phones: [
-            {
-              country: '55',
-              area: customerPhoneArea,
-              number: customerPhoneNumber,
-              type: 'MOBILE',
-            },
-          ],
-        },
-        items: [
-          {
-            name: details.description,
-            quantity: 1,
-            unit_amount: Math.round(details.amount * 100), // Valor em centavos
-          },
-        ],
-        qr_codes: [
-          {
-            amount: {
-              value: Math.round(details.amount * 100), // Valor em centavos
-            },
-            expiration_date: new Date(Date.now() + 3600 * 1000).toISOString(), // Expira em 1 hora
-          },
-        ],
-        shipping: {
-          address: addressPayload,
-        },
-        notification_urls: [details.notificationUrl], // URL do seu webhook
-      };
-
-      this.logger.debug(`[PagSeguroService] Enviando payload para PagSeguro (/orders): ${JSON.stringify(payload)}`);
-
-      const response = await axios.post(url, payload, {
+      const response = await axios.post(`${this.pagSeguroBaseApiUrl}/orders`, payload, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.pagSeguroToken}`,
+          'x-api-version': '4.0',
         },
       });
 
-      this.logger.log(`[PagSeguroService] Pedido PIX criado com sucesso para order ${details.orderId}.`);
-
-      // Extrair dados relevantes da resposta do PagSeguro
-      const gatewayTransactionId = response.data.id; // ID do pedido no PagSeguro
-      const pixQrCodeData = response.data.qr_codes?.[0];
-      const brCode = pixQrCodeData?.text;
-      const qrCodeImageLink = pixQrCodeData?.links?.find(link => link.rel === 'qr_code_png');
-      const qrCodeImage = qrCodeImageLink?.href;
-      const expiresAtDate = pixQrCodeData?.expiration_date ? new Date(pixQrCodeData.expiration_date) : new Date(Date.now() + 3600 * 1000);
-
-      if (!brCode || !qrCodeImage || !gatewayTransactionId) {
-        this.logger.error(`[PagSeguroService] Resposta inválida do PagSeguro (dados PIX incompletos): ${JSON.stringify(response.data)}`);
-        throw new InternalServerErrorException('Falha ao gerar dados de PIX. Resposta incompleta do gateway.');
+      this.logger.log(`[PagSeguroService] Cobrança PIX criada com sucesso para o pedido ${details.orderId}.`);
+      
+      const charge = response.data.charges?.[0];
+      if (!charge) {
+        throw new InternalServerErrorException('Resposta inválida do PagSeguro: charge não encontrada.');
+      }
+      
+      const qrCode = charge.payment_method?.qr_codes?.[0];
+      if (!qrCode) {
+        throw new InternalServerErrorException('Resposta inválida do PagSeguro: QR Code não encontrado.');
       }
 
       return {
-        status: 'PENDING', // PagSeguro retorna PENDING inicialmente para PIX
-        transactionId: gatewayTransactionId, // ID do pedido do PagSeguro
-        brCode: brCode,
-        qrCodeImage: qrCodeImage,
-        expiresAt: expiresAtDate.toISOString(),
-        rawResponse: response.data,
+        transactionId: response.data.id,
+        status: 'PENDING',
+        brCode: qrCode.text,
+        qrCodeImage: qrCode.links?.find(link => link.rel === 'QR_CODE_IMAGE')?.href,
+        expiresAt: charge.payment_method?.expires_at,
+        amount: details.amount.toNumber(),
+        description: details.description,
+        orderId: details.orderId,
       };
+
     } catch (error) {
-      this.logger.error(`[PagSeguroService] Erro ao gerar PIX para order ${details.orderId}: ${error.message}`);
+      this.logger.error(`[PagSeguroService] Erro ao criar cobrança PIX para o pedido ${details.orderId}: ${error.message}`);
       if (axios.isAxiosError(error) && error.response) {
         this.logger.error(`[PagSeguroService] Dados do erro da API PagSeguro: ${JSON.stringify(error.response.data)}`);
         const pagseguroErrorMessage = error.response.data?.error_messages?.[0]?.description || error.response.data?.message || 'Erro desconhecido do PagSeguro.';
         throw new InternalServerErrorException(`Falha no PagSeguro: ${pagseguroErrorMessage}`);
       }
-      throw new InternalServerErrorException('Falha ao gerar cobrança PIX com PagSeguro.');
+      throw new InternalServerErrorException('Falha ao criar cobrança PIX com PagSeguro.');
     }
   }
 
-  /**
-   * Simula ou gera um Boleto via PagSeguro.
-   * Mantido como simulado por enquanto.
-   */
-  async generateBoletoPayment(amount: number, orderId: string, userId: string): Promise<any> {
-    this.logger.log(`Simulando geração de Boleto PagSeguro para o pedido ${orderId}: ${amount}`);
-    // A integração real com a API de Pedidos do PagSeguro para Boleto
-    // exigiria um payload diferente.
-    return {
-      status: 'PENDING',
-      transactionId: `boleto_sim_${Date.now()}`,
-      barcode: '12345678901234567890123456789012345678901234',
-      boletoUrl: 'https://pagseguro.uol.com.br/boleto/simulado',
-      expiresAt: new Date(Date.now() + 5 * 24 * 3600 * 1000),
-      message: 'Boleto gerado com sucesso. Aguardando pagamento.',
+  async createPagSeguroCheckoutRedirect(details: CreatePagSeguroCheckoutRedirectDetails): Promise<{ redirectUrl: string; pagSeguroCheckoutId: string }> {
+    this.logger.log(`[PagSeguroService] Criando checkout de redirecionamento para o pedido ${details.orderId}`);
+    this.logger.debug(`[PagSeguroService] Raw customer phone: ${details.customer.phone}`); 
+
+    let customerPhoneArea: string;
+    let customerPhoneNumber: string;
+    let customerPhoneType: 'MOBILE' | 'HOME' | 'BUSINESS';
+
+    const isSandbox = this.pagSeguroBaseApiUrl.includes('sandbox'); 
+
+    if (isSandbox) {
+        customerPhoneArea = '11'; 
+        customerPhoneNumber = '30335000'; 
+        customerPhoneType = 'HOME';
+        this.logger.debug(`[PagSeguroService] Usando telefone de teste para sandbox: (${customerPhoneArea}) ${customerPhoneNumber}`);
+    } else {
+        const cleanedPhone = details.customer.phone ? details.customer.phone.replace(/\D/g, '') : '';
+        if (cleanedPhone.length >= 10) { 
+            customerPhoneArea = cleanedPhone.substring(0, 2);
+            customerPhoneNumber = cleanedPhone.substring(2);
+            customerPhoneType = customerPhoneNumber.length === 9 ? 'MOBILE' : 'HOME'; 
+        } else { 
+            this.logger.warn(`[PagSeguroService] Telefone do cliente (${details.customer.phone}) é inválido. Usando fallback.`);
+            customerPhoneArea = '11'; 
+            customerPhoneNumber = '999999999'; 
+            customerPhoneType = 'MOBILE';
+        }
+    }
+    
+    const customerTaxId = (details.customer.cpf || '30061150827').replace(/\D/g, ''); 
+    const finalCustomerTaxId = customerTaxId.length === 11 ? customerTaxId : '30061150827'; 
+
+    const stateUfMap: { [key: string]: string } = {
+      'Acre': 'AC', 'Alagoas': 'AL', 'Amapá': 'AP', 'Amazonas': 'AM', 'Bahia': 'BA',
+      'Ceará': 'CE', 'Distrito Federal': 'DF', 'Espírito Santo': 'ES', 'Goiás': 'GO',
+      'Maranhão': 'MA', 'Mato Grosso': 'MT', 'Mato Grosso do Sul': 'MS', 'Minas Gerais': 'MG',
+      'Pará': 'PA', 'Paraíba': 'PB', 'Paraná': 'PR', 'Pernambuco': 'PE', 'Piauí': 'PI',
+      'Rio de Janeiro': 'RJ', 'Rio Grande do Norte': 'RN', 'Rio Grande do Sul': 'RS',
+      'Rondônia': 'RO', 'Roraima': 'RR', 'Santa Catarina': 'SC', 'São Paulo': 'SP',
+      'Sergipe': 'SE', 'Tocantins': 'TO'
     };
+    const regionCode = stateUfMap[details.shippingAddress.state] || details.shippingAddress.state.toUpperCase();
+    if (regionCode.length !== 2) {
+        this.logger.warn(`[PagSeguroService] Código de região inválido para o estado: ${details.shippingAddress.state}. Enviado: ${regionCode}`);
+    }
+
+
+    const shippingServiceMap: { [key: string]: string } = {
+      '4014': 'SEDEX', 
+      '41106': 'PAC',  
+      'FIXED': 'FIXED', 
+    };
+    const pagSeguroShippingService = shippingServiceMap[details.shippingService] || details.shippingService;
+
+
+    const shippingAddressPayload: PagSeguroCheckoutAddress = {
+      country: 'BRA',
+      region_code: regionCode, 
+      city: details.shippingAddress.city,
+      postal_code: details.shippingAddress.cep.replace(/\D/g, ''), 
+      street: details.shippingAddress.street,
+      number: details.shippingAddress.number,
+      locality: details.shippingAddress.neighborhood,
+      complement: details.shippingAddress.complement || null,
+    };
+
+    const itemsPayload: PagSeguroCheckoutItem[] = details.items.map(item => ({
+      name: item.name,
+      quantity: item.quantity,
+      unit_amount: Math.round(item.unit_amount.toNumber() * 100), 
+    }));
+
+    const payload = {
+      reference_id: details.orderId,
+      customer: {
+        name: details.customer.fullName,
+        email: details.customer.email,
+        tax_id: finalCustomerTaxId, 
+        phones: [
+          {
+            country: '55',
+            area: customerPhoneArea, 
+            number: customerPhoneNumber, 
+            type: customerPhoneType, 
+          },
+        ],
+      },
+      items: itemsPayload,
+      shipping: {
+        address: shippingAddressPayload,
+        type: 'FIXED', 
+        service_type: pagSeguroShippingService, 
+        amount: Math.round(details.shippingPrice.toNumber() * 100), 
+        address_modifiable: false,
+      },
+      redirect_url: `${this.redirectBaseUrl}/order-success?orderId=${details.orderId}`, 
+      notification_urls: [`${this.notificationBaseUrl}/payments/webhook/pagseguro`], 
+      description: details.description,
+      customer_modifiable: false,
+      address_modifiable: false,
+    };
+
+    this.logger.debug(`[PagSeguroService] Enviando payload para PagSeguro (${this.pagSeguroBaseApiUrl}/checkouts): ${JSON.stringify(payload)}`);
+
+    try {
+      const response = await axios.post(`${this.pagSeguroBaseApiUrl}/checkouts`, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.pagSeguroToken}`,
+          'x-api-version': '4.0', 
+        },
+      });
+
+      this.logger.log(`[PagSeguroService] Checkout de redirecionamento criado com sucesso para order ${details.orderId}.`);
+
+      const checkoutId = response.data.id;
+      const payLink = response.data.links?.find((link: any) => link.rel === 'PAY');
+
+      if (!payLink || !payLink.href) {
+        this.logger.error(`[PagSeguroService] Resposta inválida do PagSeguro (link PAY ausente): ${JSON.stringify(response.data)}`);
+        throw new InternalServerErrorException('Falha ao obter link de pagamento do PagSeguro. Resposta incompleta.');
+      }
+
+      return {
+        redirectUrl: payLink.href,
+        pagSeguroCheckoutId: checkoutId,
+      };
+    } catch (error) {
+      this.logger.error(`[PagSeguroService] Erro ao criar checkout de redirecionamento para order ${details.orderId}: ${error.message}`);
+      if (axios.isAxiosError(error) && error.response) {
+        this.logger.error(`[PagSeguroService] Dados do erro da API PagSeguro: ${JSON.stringify(error.response.data)}`);
+        const pagseguroErrorMessage = error.response.data?.error_messages?.[0]?.description || error.response.data?.message || 'Erro desconhecido do PagSeguro.';
+        throw new InternalServerErrorException(`Falha no PagSeguro: ${pagseguroErrorMessage}`);
+      }
+      throw new InternalServerErrorException('Falha ao criar checkout de redirecionamento com PagSeguro.');
+    }
   }
 
-  /**
-   * Busca os detalhes de uma notificação do PagSeguro (para a API de Pedidos).
-   * O `notificationCode` aqui será o `orderId` que o PagSeguro envia no webhook.
-   * @param orderId O ID do pedido do PagSeguro recebido no webhook.
-   */
-  async getNotificationDetails(orderId: string): Promise<any> {
-    this.logger.log(`[PagSeguroService] Buscando detalhes do pedido PagSeguro: ${orderId}`);
+  async getCheckoutDetails(pagSeguroCheckoutId: string): Promise<any> {
+    this.logger.log(`[PagSeguroService] Buscando detalhes do checkout PagSeguro: ${pagSeguroCheckoutId}`);
 
-    const url = `${this.pagSeguroApiUrl}/orders/${orderId}`;
+    const url = `${this.pagSeguroBaseApiUrl}/checkouts/${pagSeguroCheckoutId}`;
 
     try {
       const response = await axios.get(url, {
         headers: {
           'Authorization': `Bearer ${this.pagSeguroToken}`,
+          'x-api-version': '4.0',
         },
       });
-      this.logger.log(`[PagSeguroService] Detalhes do pedido ${orderId} obtidos com sucesso.`);
-      return response.data; // Retorna os detalhes completos do pedido
+      this.logger.log(`[PagSeguroService] Detalhes do checkout ${pagSeguroCheckoutId} obtidos com sucesso.`);
+      return response.data;
     } catch (error) {
-      this.logger.error(`[PagSeguroService] Erro ao buscar detalhes do pedido PagSeguro ${orderId}:`, error.response?.data || error.message);
+      this.logger.error(`[PagSeguroService] Erro ao buscar detalhes do checkout PagSeguro ${pagSeguroCheckoutId}:`, error.response?.data || error.message);
       if (axios.isAxiosError(error) && error.response && error.response.status === 404) {
-        throw new NotFoundException(`Pedido PagSeguro com ID "${orderId}" não encontrado.`);
+        throw new NotFoundException(`Checkout PagSeguro com ID "${pagSeguroCheckoutId}" não encontrado.`);
       }
-      throw new InternalServerErrorException('Falha ao consultar detalhes do pedido PagSeguro.');
+      throw new InternalServerErrorException('Falha ao consultar detalhes do checkout PagSeguro.');
     }
   }
 }

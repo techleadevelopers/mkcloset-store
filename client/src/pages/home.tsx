@@ -40,7 +40,15 @@ export default function Home() {
     queryKey: ['featuredProducts'],
     queryFn: async () => {
       const res = await apiRequest('GET', '/products/featured');
-      return res.json();
+      const jsonResponse = await res.json(); // Pega a resposta JSON completa
+      const productsData = jsonResponse.data; // Tenta pegar a propriedade 'data'
+
+      // Verifica se 'productsData' é realmente um array
+      if (!Array.isArray(productsData)) {
+        console.error('A resposta da API para produtos em destaque não foi um array válido na propriedade "data":', jsonResponse);
+        return []; // Retorna um array vazio para evitar erros de .slice
+      }
+      return productsData;
     },
     staleTime: 1000 * 60 * 5, // 5 minutos de cache
   });
@@ -50,7 +58,15 @@ export default function Home() {
     queryKey: ['categories'],
     queryFn: async () => {
       const res = await apiRequest('GET', '/categories');
-      return res.json();
+      const jsonResponse = await res.json(); // Pega a resposta JSON completa
+      const categoriesData = jsonResponse.data; // Tenta pegar a propriedade 'data'
+
+      // Verifica se 'categoriesData' é realmente um array
+      if (!Array.isArray(categoriesData)) {
+        console.error('A resposta da API para categorias não foi um array válido na propriedade "data":', jsonResponse);
+        return []; // Retorna um array vazio para evitar erros de .slice
+      }
+      return categoriesData;
     },
     staleTime: 1000 * 60 * 60, // 1 hora de cache
   });
@@ -87,9 +103,9 @@ export default function Home() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-6">
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
-                <div className="text-3xl sm:text-4xl lg:text-8xl font-bold text-gray-900 mb-0 relative h-32 lg:h-48"> {/* Added relative and height to parent for absolute positioning */}
-    <span className="luxurious-script-regular absolute left-0 top-1/2 transform -translate-y-1/2 rotate-[-deg] whitespace-nowrap origin-bottom-left" style={{ /* Optional: Add specific styles if needed */ }}>
-        New Collections
+                <div className="text-2xl sm:text-2xl lg:text-6xl font-bold text-gray-900 mb-0 relative h-32 lg:h-48"> {/* Added relative and height to parent for absolute positioning */}
+    <span className="luxurious-script-regular absolute left-0 bottom-1 transform -translate-y-1/2 rotate-[-deg] whitespace-nowrap origin-bottom-left" style={{ /* Optional: Add specific styles if needed */ }}>
+      New Collections
     </span>
 </div>
                 <span className="block text-gradient-black font-chakra-petch">
@@ -153,6 +169,7 @@ export default function Home() {
                 </div>
               ))
             ) : (
+              // Garantir que categories é um array antes de usar slice
               categories?.slice(0, 6).map((category) => (
                 <Link key={category.id} href={`/products/${category.slug}`}>
                   <div className="group text-center cursor-pointer">
@@ -184,7 +201,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Restante do Home.tsx permanece o mesmo */}
       {/* Featured Products */}
       <section className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -211,6 +227,7 @@ export default function Home() {
                 </div>
               ))
             ) : (
+              // Garantir que featuredProducts é um array antes de usar slice
               featuredProducts?.slice(0, 4).map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))

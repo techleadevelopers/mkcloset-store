@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Abel&family=Chakra+Petch:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&family=Gruppo&family=Luxurious+Script&family=Monsieur+La+Doulaise&family=Poppins:wght@400;500;600;700&display=swap'); /* URL combinada com todas as fontes */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -67,39 +67,15 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Poppins', sans-serif;
+    font-family: 'Montserrat', sans-serif; /* FONTE PADRÃO DO PROJETO */
   }
 
-  /* NOVAS CLASSES PARA AS FONTES INTEGRADAS */
-  .monsieur-la-doulaise-regular {
-    font-family: "Monsieur La Doulaise", cursive;
-    font-weight: 400;
-    font-style: normal;
+  .font-poppins {
+    font-family: "Poppins", sans-serif;
   }
 
-  .luxurious-script-regular {
-    font-family: "Luxurious Script", cursive;
-    font-weight: 400;
-    font-style: normal;
-  }
-
-  .abel-regular {
-    font-family: "Abel", sans-serif;
-    font-weight: 400;
-    font-style: normal;
-  }
-
-  /* Novas fontes adicionadas */
-  .chakra-petch-regular { /* Para Chakra Petch, use pesos específicos se necessário */
-    font-family: "Chakra Petch", sans-serif;
-    font-weight: 400; /* Ou o peso que você mais usar como padrão */
-    font-style: normal;
-  }
-
-  .gruppo-regular { /* Para Gruppo */
-    font-family: "Gruppo", sans-serif;
-    font-weight: 400;
-    font-style: normal;
+  .font-montserrat {
+    font-family: "Montserrat", sans-serif;
   }
 }
 
@@ -111,7 +87,6 @@
     background-clip: text;
   }
 
-  /* Line clamp utility */
   .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -145,7 +120,6 @@
   @apply transition-transform duration-300 hover:scale-105;
 }
 
-/* Card depth effects - removing borders and adding shadows */
 .card-depth {
   @apply shadow-sm hover:shadow-2xl transition-all duration-500 ease-out hover:-translate-y-2 border-0 bg-white rounded-2xl;
 }
@@ -160,31 +134,26 @@
     @apply px-4;
   }
 
-  /* Mobile product cards - make them smaller and centered */
   .product-card-mobile {
     @apply w-full max-w-xs mx-auto;
   }
 
-  /* Mobile hero adjustments */
   .hero-mobile {
-    @apply text-2xl px-4; /* Ajuste o tamanho do texto */
+    @apply text-2xl px-4;
   }
 
-  /* Ajustes nos botões */
   .btn-primary {
-    @apply py-1 px-1; /* Ajuste o padding para botões menores */
+    @apply py-1 px-1;
   }
 
-  /* Ajustes no texto */
   h1 {
-    @apply text-2xl; /* Tamanho da fonte para h1 em mobile */
+    @apply text-2xl;
   }
 
   p {
-    @apply text-sm; /* Tamanho da fonte para parágrafo em mobile */
+    @apply text-sm;
   }
-  /* styles.css */
-
+  
   footer {
     padding: 2rem 0;
   }
@@ -203,40 +172,38 @@
     text-align: center;
   }
 
-
-
   @media (max-width: 768px) {
     footer {
       padding: 1rem 0;
     }
 
     footer h3 {
-      font-size: 1.5rem; /* Ajuste para mobile */
+      font-size: 1.5rem;
     }
 
     footer h4 {
-      font-size: 1rem; /* Ajuste para mobile */
+      font-size: 1rem;
     }
 
     footer p {
-      font-size: 0.875rem; /* Ajuste para mobile */
+      font-size: 0.875rem;
     }
 
     footer ul li {
-      margin-bottom: 0.5rem; /* Espaçamento entre itens */
+      margin-bottom: 0.5rem;
     }
   }
   .promo-banner h3 {
-    font-size: 2rem; /* Tamanho do título em mobile */
+    font-size: 2rem;
   }
 
   .promo-banner p {
-    font-size: 1rem; /* Tamanho do texto em mobile */
+    font-size: 1rem;
   }
 
   .promo-banner .flex {
-    flex-direction: column; /* Muda para coluna em mobile */
-    align-items: center; /* Alinha ao centro */
+    flex-direction: column;
+    align-items: center;
   }
 }
 

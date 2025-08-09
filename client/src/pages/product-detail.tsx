@@ -26,7 +26,7 @@ export default function ProductDetail() {
   const [, params] = useRoute('/product/:id');
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const productId = params?.id; // ID agora é string
+  const productId = params?.id;
 
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<string>('');
@@ -37,36 +37,76 @@ export default function ProductDetail() {
   const { addToCart, items } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
 
-  // Query para buscar o produto principal
+  // Query para buscar os detalhes do produto principal usando react-query.
   const { data: product, isLoading: isLoadingProduct, isError: isErrorProduct } = useQuery<Product>({
     queryKey: ['product', productId],
     queryFn: async () => {
-      if (!productId) throw new Error("ID do produto não fornecido.");
-      const res = await apiRequest('GET', `/products/${productId}`);
-      return res.json();
+      if (!productId) {
+        console.error('[product-detail] Erro: ID do produto não fornecido na URL.');
+        throw new Error("ID do produto não fornecido.");
+      }
+      
+      try {
+        console.log(`[product-detail] Tentando buscar produto com ID: ${productId}`);
+        const res = await apiRequest('GET', `/products/${productId}`);
+        
+        if (!res.ok) {
+            const errorData = await res.json();
+            console.error('[product-detail] Erro na resposta da API:', res.status, errorData);
+            throw new Error(errorData.message || `Erro ao buscar produto: ${res.statusText}`);
+        }
+
+        const json = await res.json();
+        console.log('[product-detail] Resposta da API para o produto:', json);
+
+        // --- ALTERAÇÃO CRÍTICA AQUI ---
+        // Verifica se 'json.data' existe e se 'json.data.id' existe.
+        // Isso é necessário porque sua API está retornando os dados aninhados em uma propriedade 'data'.
+        let productData: Product;
+        if (json && typeof json === 'object' && 'data' in json && json.data && typeof json.data === 'object' && 'id' in json.data) {
+          productData = json.data; // Retorna json.data, que é o objeto do produto real.
+        } else if (json && typeof json === 'object' && 'id' in json) {
+          // Fallback caso a API retorne o objeto do produto diretamente (sem 'data' aninhado)
+          productData = json;
+        } else {
+          throw new Error("Formato de resposta da API inesperado ou produto não encontrado.");
+        }
+        
+        // Add console log here to check images array
+        console.log('[product-detail] Product images array:', productData.images); // <--- Adicionado este console.log
+        
+        return productData;
+        // --- FIM DA ALTERAÇÃO CRÍTICA ---
+      } catch (error) {
+        console.error('[product-detail] Erro ao buscar dados do produto:', error);
+        throw error;
+      }
     },
-    enabled: !!productId, // Só executa a query se productId existir
-    staleTime: 1000 * 60 * 5, // 5 minutos de cache
+    enabled: !!productId,
+    staleTime: 1000 * 60 * 5,
   });
 
-  // Query para buscar produtos relacionados (pela mesma categoria)
+  // Query para buscar produtos relacionados (da mesma categoria) usando react-query.
   const { data: relatedProducts, isLoading: isLoadingRelatedProducts } = useQuery<Product[]>({
     queryKey: ['relatedProducts', product?.categoryId, product?.id],
     queryFn: async () => {
       if (!product?.categoryId) return [];
       const res = await apiRequest('GET', `/products?categoryId=${product.categoryId}`);
-      // Filtra o próprio produto e limita a 4
-      return res.json().then((prods: Product[]) => prods.filter(p => p.id !== product.id).slice(0, 4));
+      // Filtra o próprio produto da lista de relacionados e limita a 4 resultados.
+      const jsonResponse = await res.json();
+      // Assume que a resposta para produtos relacionados também pode ter a estrutura { data: [...] }
+      const prods = Array.isArray(jsonResponse.data) ? jsonResponse.data : jsonResponse;
+      return prods.filter((p: Product) => p.id !== product.id).slice(0, 4);
     },
-    enabled: !!product?.categoryId, // Só executa se o produto principal e sua categoria existirem
+    enabled: !!product?.categoryId,
     staleTime: 1000 * 60 * 5,
   });
 
+  // Efeito para definir tamanho e cor padrão quando o produto é carregado.
   useEffect(() => {
     if (product) {
-      // Definir tamanho e cor padrão se disponíveis
-      if (product.sizes.length > 0 && !selectedSize) setSelectedSize(product.sizes[0]);
-      if (product.colors.length > 0 && !selectedColor) setSelectedColor(product.colors[0]);
+      if (product.sizes && product.sizes.length > 0 && !selectedSize) setSelectedSize(product.sizes[0]);
+      if (product.colors && product.colors.length > 0 && !selectedColor) setSelectedColor(product.colors[0]);
     }
   }, [product, selectedSize, selectedColor]);
 
@@ -76,12 +116,11 @@ export default function ProductDetail() {
   const handleAddToCart = async () => {
     if (!product) return;
 
-    // Adicionar validação de seleção de tamanho/cor se obrigatório
-    if (product.sizes.length > 0 && !selectedSize) {
+    if (product.sizes && product.sizes.length > 0 && !selectedSize) {
       toast({ title: "Erro", description: "Por favor, selecione um tamanho.", variant: "destructive" });
       return;
     }
-    if (product.colors.length > 0 && !selectedColor) {
+    if (product.colors && product.colors.length > 0 && !selectedColor) {
       toast({ title: "Erro", description: "Por favor, selecione uma cor.", variant: "destructive" });
       return;
     }
@@ -121,7 +160,7 @@ export default function ProductDetail() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
             <div className="space-y-4">
-              <Skeleton className="w-full aspect-square rounded-lg" />
+              <Skeleton className="w-full aspect-square rounded-2xl" />
               <div className="grid grid-cols-4 gap-2">
                 {[...Array(4)].map((_, i) => (
                   <Skeleton key={i} className="aspect-square rounded-lg" />
@@ -174,7 +213,6 @@ export default function ProductDetail() {
       <div className="min-h-screen bg-white">
         <Header />
         
-        {/* Breadcrumb */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center space-x-2 text-sm text-gray-500">
             <button onClick={() => setLocation('/')} className="hover:text-gray-900">
@@ -189,14 +227,12 @@ export default function ProductDetail() {
           </div>
         </div>
 
-        {/* Product Details */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            {/* Product Images */}
             <div className="space-y-4">
               <div className="relative aspect-square bg-gray-100 rounded-2xl overflow-hidden">
                 <img
-                  src={product.imageUrl}
+                  src={product.images?.[0] || 'https://placehold.co/600x800/e2e8f0/ffffff?text=Sem+Imagem'}
                   alt={product.name}
                   className="w-full h-full object-cover"
                 />
@@ -211,7 +247,6 @@ export default function ProductDetail() {
                   </Badge>
                 )}
               </div>
-              {/* Miniaturas de imagem */}
               {product.images && product.images.length > 0 && (
                 <div className="grid grid-cols-4 gap-2">
                   {product.images.map((img, index) => (
@@ -223,9 +258,7 @@ export default function ProductDetail() {
               )}
             </div>
 
-            {/* Product Info */}
             <div className="space-y-6">
-              {/* Title and Price */}
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.name}</h1>
                 <p className="text-gray-600 mb-4">{product.description}</p>
@@ -241,7 +274,6 @@ export default function ProductDetail() {
                   )}
                 </div>
 
-                {/* Rating (mockado) */}
                 <div className="flex items-center space-x-1 mb-6">
                   {[...Array(5)].map((_, i) => (
                     <Star
@@ -253,7 +285,6 @@ export default function ProductDetail() {
                 </div>
               </div>
 
-              {/* Size Selection */}
               {product.sizes && product.sizes.length > 0 && (
                 <div>
                   <h3 className="font-semibold mb-3">Tamanho</h3>
@@ -278,7 +309,6 @@ export default function ProductDetail() {
                 </div>
               )}
 
-              {/* Color Selection */}
               {product.colors && product.colors.length > 0 && (
                 <div>
                   <h3 className="font-semibold mb-3">Cor: {selectedColor}</h3>
@@ -301,12 +331,12 @@ export default function ProductDetail() {
                             color.toLowerCase() === 'azul' ? '#3b82f6' :
                             color.toLowerCase() === 'rosa' ? '#ec4899' :
                             color.toLowerCase() === 'verde' ? '#10b981' :
-                            color.toLowerCase() === 'bordo' ? '#800020' : // Adicionado Bordo
-                            color.toLowerCase() === 'off white' ? '#f5f5dc' : // Adicionado Off White
+                            color.toLowerCase() === 'bordo' ? '#800020' :
+                            color.toLowerCase() === 'off white' ? '#f5f5dc' :
                             color.toLowerCase() === 'vinho' ? '#7c2d12' :
                             color.toLowerCase() === 'camel' ? '#d2691e' :
                             color.toLowerCase() === 'bege' ? '#f5f5dc' :
-                            '#6b7280' // Cor padrão
+                            '#6b7280'
                         }}
                         title={color}
                       />
@@ -315,7 +345,6 @@ export default function ProductDetail() {
                 </div>
               )}
 
-              {/* Quantity */}
               <div>
                 <h3 className="font-semibold mb-3">Quantidade</h3>
                 <div className="flex items-center space-x-3">
@@ -342,7 +371,6 @@ export default function ProductDetail() {
                 </p>
               </div>
 
-              {/* Action Buttons */}
               <div className="space-y-4">
                 <div className="flex space-x-4">
                   <Button
@@ -380,7 +408,6 @@ export default function ProductDetail() {
                 </div>
               </div>
 
-              {/* Features */}
               <div className="border-t pt-6">
                 <div className="grid grid-cols-1 gap-4">
                   <div className="flex items-center space-x-3">
@@ -406,7 +433,6 @@ export default function ProductDetail() {
             </div>
           </div>
 
-          {/* Related Products */}
           {relatedProducts && relatedProducts.length > 0 && (
             <div className="mt-16">
               <h2 className="text-2xl font-bold text-gray-900 mb-8">Produtos Relacionados</h2>
