@@ -2,26 +2,25 @@
 # Usa uma imagem oficial do Node.js como base
 FROM node:22-alpine AS build
 
-# Define o diretório de trabalho dentro do container
-# O Railway clona o seu repositório no diretório raiz do container,
-# então o WORKDIR deve ser o diretório da sua aplicação (backend)
+# Define o diretório de trabalho na raiz do container
+WORKDIR /usr/src/app
+
+# Copia todo o conteúdo do seu repositório para o contêiner
+COPY . .
+
+# Define o diretório de trabalho para a pasta 'backend'
+# Isso garante que os comandos a seguir serão executados no contexto correto
 WORKDIR /usr/src/app/backend
 
-# Copia os arquivos de definição de dependência (package.json e afins)
-# Isso permite que o Docker cache a camada de dependências
-COPY package*.json ./
-
-# Instala as dependências, incluindo as de desenvolvimento
+# Instala as dependências (do package.json do backend)
 RUN npm install
-
-# Copia todo o restante do código da sua aplicação
-COPY . .
 
 # Gera o cliente do Prisma. Isso garante que o binário do Prisma
 # seja compatível com a arquitetura do container.
 RUN npx prisma generate
 
-# Executa o build da sua aplicação NestJS
+# Executa o build da sua aplicação NestJS.
+# Este comando irá criar a pasta `dist` no diretório de trabalho atual.
 RUN npm run build
 
 
@@ -33,10 +32,10 @@ FROM node:22-alpine AS production
 WORKDIR /usr/src/app/backend
 
 # Copia apenas os arquivos essenciais da imagem de build
-COPY --from=build /usr/src/app/backend/package*.json ./
 COPY --from=build /usr/src/app/backend/node_modules ./node_modules
 COPY --from=build /usr/src/app/backend/dist ./dist
 COPY --from=build /usr/src/app/backend/prisma ./prisma
+COPY --from=build /usr/src/app/backend/package*.json ./
 
 # Define a porta que a aplicação irá expor
 EXPOSE 8080
