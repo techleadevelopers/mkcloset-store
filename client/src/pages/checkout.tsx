@@ -1,3 +1,5 @@
+// src/pages/checkout.tsx
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,7 +16,7 @@ import FrontendShippingCalculator from '@/components/shipping/frontend-shipping-
 import { useLocation } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest, getOrCreateGuestId } from '@/lib/queryClient';
-import { Address, Order, PaymentMethod, User, PixChargeResponseDto } from '@/types/backend'; // Importação corrigida do DTO
+import { Address, Order, PaymentMethod, User, PixChargeResponseDto } from '@/types/backend';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -89,9 +91,9 @@ export default function Checkout() {
   const [guestPassword, setGuestPassword] = useState('');
   // --- Fim dos novos estados ---
 
-  // NOVO: Estados para a tela de pagamento PIX
-  const [pixData, setPixData] = useState<PixChargeResponseDto | null>(null);
-  const [orderId, setOrderId] = useState<string | null>(null);
+  // REMOVIDO: Estados para a tela de pagamento PIX (serão tratados em order-success)
+  // const [pixData, setPixData] = useState<PixChargeResponseDto | null>(null);
+  // const [orderId, setOrderId] = useState<string | null>(null); // Este estado não será mais usado para navegação
 
   const isUserAuthenticated = !!localStorage.getItem('access_token');
 
@@ -156,12 +158,16 @@ export default function Checkout() {
     },
   });
 
-  // REMOVIDO: a mutation de redirecionamento.
-  
   // NOVA MUTATION: Para criar uma cobrança PIX no backend
-  const createPixChargeMutation = useMutation<PixChargeResponseDto, Error, { orderId: string }>({
-    mutationFn: async ({ orderId }) => {
-      const res = await apiRequest('POST', `/payments/pix-charge/${orderId}`);
+  // Adicionado guestId ao tipo de entrada da mutação
+  const createPixChargeMutation = useMutation<PixChargeResponseDto, Error, { orderId: string; guestId?: string }>({
+    mutationFn: async ({ orderId, guestId }) => {
+      // CORREÇÃO AQUI: Garante que orderId e guestId (se existir) sejam enviados no payload
+      const payload: { orderId: string; guestId?: string } = { orderId: orderId };
+      if (guestId) {
+        payload.guestId = guestId;
+      }
+      const res = await apiRequest('POST', `/payments/pix-charge/${orderId}`, payload); // Envia o payload
       return res.json();
     },
     onError: (error: Error) => {
@@ -210,10 +216,13 @@ export default function Checkout() {
         shippingPrice: shippingPrice,
       };
 
+      let currentGuestId: string | undefined; // Variável para armazenar o guestId
+
       if (isUserAuthenticated) {
         orderPayload.shippingAddressId = selectedAddressId!;
       } else {
-        orderPayload.guestId = getOrCreateGuestId();
+        currentGuestId = getOrCreateGuestId(); // Obtém o guestId aqui
+        orderPayload.guestId = currentGuestId; // Atribui ao orderPayload
         orderPayload.guestContactInfo = {
           name: guestName,
           email: guestEmail,
@@ -243,27 +252,41 @@ export default function Checkout() {
         throw new Error('Não foi possível obter o ID do pedido.');
       }
       
-      setOrderId(newOrder.id);
+      // A limpeza do carrinho é movida para o final do fluxo.
+      clearCart();
+      queryClient.invalidateQueries({ queryKey: ['cart'] });
+      queryClient.invalidateQueries({ queryKey: ['userAddresses'] });
 
-      // NOVO: Se o método de pagamento for PIX, criamos a cobrança e mostramos a tela.
+      // Constrói a URL para a página de sucesso
+      let navigationPath = `/order-success?orderId=${newOrder.id}`;
+      if (!isUserAuthenticated && currentGuestId) {
+        navigationPath += `&guestId=${currentGuestId}`;
+      }
+
+      // NOVO: Se o método de pagamento for PIX, criamos a cobrança e NAVEGAMOS.
       if (paymentMethod === 'PIX') {
-        const pixChargeData = await createPixChargeMutation.mutateAsync({ orderId: newOrder.id });
-        setPixData(pixChargeData);
+        // Ainda precisamos chamar createPixChargeMutation para que o backend
+        // configure a cobrança no PagSeguro e as notification_urls.
+        // A resposta pixChargeData não será usada para renderização aqui,
+        // mas o backend deve garantir que os dados do PIX estejam disponíveis
+        // quando a order-success buscar os detalhes do pedido.
+        await createPixChargeMutation.mutateAsync({ 
+            orderId: newOrder.id,
+            guestId: isUserAuthenticated ? undefined : currentGuestId 
+        });
+        // Após criar a cobrança PIX, NAVEGA para a página de sucesso do pedido.
+        setLocation(navigationPath); // <--- ESTA É A MUDANÇA CHAVE PARA NAVEGAR
       } else {
         // Se for outro método (como Cartão de Crédito ou Boleto),
-        // mantemos o fluxo de redirecionamento, mas a mutation é diferente
-        const pagSeguroRedirectData = await apiRequest('POST', `/payments/initiate-checkout/${newOrder.id}`).then(res => res.json());
+        // mantemos o fluxo de redirecionamento para o PagSeguro
+        const payloadForRedirect = isUserAuthenticated ? {} : { guestId: currentGuestId };
+        const pagSeguroRedirectData = await apiRequest('POST', `/payments/initiate-checkout/${newOrder.id}`, payloadForRedirect).then(res => res.json());
         if (pagSeguroRedirectData.redirectUrl) {
           window.location.href = pagSeguroRedirectData.redirectUrl;
         } else {
           throw new Error('Falha ao obter URL de redirecionamento do PagSeguro.');
         }
       }
-
-      // A limpeza do carrinho é movida para o final do fluxo.
-      clearCart();
-      queryClient.invalidateQueries({ queryKey: ['cart'] });
-      queryClient.invalidateQueries({ queryKey: ['userAddresses'] });
 
     } catch (error) {
       console.error(error);
@@ -339,81 +362,8 @@ export default function Checkout() {
     );
   }
 
-  // NOVA TELA: Exibir QR Code se os dados do Pix estiverem disponíveis
-  if (pixData) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-montserrat flex items-center justify-center p-4">
-        <Card className="w-full max-w-lg mx-auto shadow-2xl border-0">
-          <CardHeader className="text-center">
-            <CardTitle className="text-3xl font-bold text-gray-800 font-playfair">
-              Pagamento com PIX
-            </CardTitle>
-            <p className="text-gray-600 font-montserrat">
-              Escaneie o QR Code ou copie o código para finalizar seu pagamento.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-6 text-center">
-            {/* QR Code */}
-            {pixData.qrCodeImage ? (
-              <div className="flex justify-center">
-                <img src={pixData.qrCodeImage} alt="QR Code PIX" className="w-64 h-64 border-2 rounded-lg" />
-              </div>
-            ) : (
-              <div className="bg-gray-200 w-64 h-64 flex items-center justify-center rounded-lg text-gray-500">
-                <p>QR Code não disponível.</p>
-              </div>
-            )}
-            
-            {/* Código "Copia e Cola" */}
-            <div className="space-y-2">
-              <Label htmlFor="brCode" className="font-semibold text-gray-800">
-                Código Copia e Cola
-              </Label>
-              <div className="relative">
-                <Input
-                  id="brCode"
-                  value={pixData.brCode}
-                  readOnly
-                  className="pr-12 text-center overflow-ellipsis overflow-hidden"
-                />
-                <Button
-                  className="absolute right-1 top-1 h-8 w-10 text-xs"
-                  onClick={() => {
-                    document.execCommand('copy');
-                    toast({
-                      title: "Copiado!",
-                      description: "O código Pix foi copiado para a área de transferência.",
-                    });
-                  }}
-                >
-                  Copiar
-                </Button>
-              </div>
-            </div>
-
-            {/* Informações adicionais */}
-            <div className="text-sm text-gray-600 space-y-1">
-              <p>
-                Valor: <span className="font-semibold text-gray-900">R$ {pixData.amount.toFixed(2)}</span>
-              </p>
-              <p>
-                Expira em: <span className="font-semibold">{new Date(pixData.expiresAt).toLocaleTimeString()}</span>
-              </p>
-            </div>
-            
-            <p className="text-xs text-gray-500 mt-4">
-              Acompanhe o status do seu pedido pelo seu e-mail.
-            </p>
-
-            <Button onClick={() => setLocation('/orders')} className="w-full">
-              Ver Meus Pedidos
-            </Button>
-
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // REMOVIDO: O bloco de renderização do PIX foi movido para order-success.tsx
+  // if (pixData) { ... }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-montserrat">
@@ -592,8 +542,8 @@ export default function Checkout() {
 
                 {currentStep === 2 && (
                   <div className="space-y-6">
-                    <div className="flex justify-center mb-4">
-                      <img src="/pagseguro.png" alt="Pagamentos via PagSeguro" className="max-w-[150px]" />
+                    <div className="flex justify-center mb-14 mt-14">
+                      <img src="/images/pag-Photoroom.png" alt="Pagamentos via PagSeguro" className="max-w-[150px]" />
                     </div>
                     
                     <h3 className="text-lg font-semibold font-playfair text-center">3. Método de Pagamento</h3>

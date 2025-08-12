@@ -145,7 +145,7 @@ export default function Footer() {
             <img
               src="/images/nubank.jpg"
               alt="Nubank"
-              className="h-8 sm:h-10 lg:h-11 object-contain" // Ajuste a altura conforme necessário
+              className="h-18 sm:h-18 lg:h-18 object-contain" // Ajuste a altura conforme necessário
             />
           </div>
         </div>

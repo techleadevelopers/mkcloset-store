@@ -5,5 +5,5 @@ tunnels:
     addr: 5173
     proto: http
   backend:
-    addr: 3000
+    addr: 3001
     proto: http
