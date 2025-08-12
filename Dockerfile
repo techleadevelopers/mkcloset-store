@@ -1,42 +1,46 @@
-# Stage 1: Build a development image with all dependencies
-# Usando a imagem Node.js 22 COMPLETA.
-FROM node:22 AS build 
+# Stage 1: Build Image
+# Usa uma imagem oficial do Node.js como base
+FROM node:22-alpine AS build
 
-# Define o diretório de trabalho como a pasta do backend
-# ESSA É A PRINCIPAL MUDANÇA PARA RESOLVER O ERRO DO PRISMA
+# Define o diretório de trabalho na raiz do container
+# A sua aplicação está no diretório 'backend', então vamos direto para lá.
 WORKDIR /usr/src/app/backend
 
-# Copia os arquivos de configuração do npm para o diretório de trabalho
-# A instrução 'COPY' agora leva em consideração a nova pasta de trabalho
-COPY ./backend/package*.json ./
+# Copia os arquivos de definição de dependência (package.json e afins) do backend
+COPY ./package*.json ./
 
-# Instala as dependências
+# Instala as dependências, incluindo as de desenvolvimento
 RUN npm install
 
-# Copia todo o restante do código do backend para o diretório de trabalho
-COPY ./backend .
+# Copia todo o restante do código da sua aplicação (backend)
+COPY . .
 
-# Agora os comandos serão executados dentro de /usr/src/app/backend
-RUN npx prisma generate # Isso agora gerará o engine debian-openssl-3.0.x
+# Gera o cliente do Prisma. Isso garante que o binário do Prisma
+# seja compatível com a arquitetura do container.
+RUN npx prisma generate
 
+# Executa o build da sua aplicação NestJS.
+# Este comando irá criar a pasta `dist` no diretório de trabalho atual.
 RUN npm run build
 
 
-# Stage 2: Create a production-ready image
-FROM node:22 AS production 
+# Stage 2: Production Image
+# Cria uma imagem mais leve para produção
+FROM node:22-alpine AS production
 
-# Define o diretório de trabalho como a pasta do backend
+# Define o diretório de trabalho da aplicação
 WORKDIR /usr/src/app/backend
 
-# A instrução 'COPY --from' precisa ser ajustada para o novo diretório
-# de trabalho na imagem de build
+# Copia apenas os arquivos essenciais da imagem de build
 COPY --from=build /usr/src/app/backend/node_modules ./node_modules
 COPY --from=build /usr/src/app/backend/dist ./dist
-COPY --from=build /usr/src/app/backend/node_modules/.prisma/client ./node_modules/.prisma/client
-COPY --from=build /usr/src/app/backend/prisma/schema.prisma ./prisma/schema.prisma
+COPY --from=build /usr/src/app/backend/prisma ./prisma
+COPY --from=build /usr/src/app/backend/package*.json ./
 
-# A variável de ambiente DATABASE_URL DEVE ser configurada NO PAINEL DO RAILWAY.
-# Não podemos usar a sintaxe do Railway no Dockerfile.
-ENV PORT 8080
+# Define a porta que a aplicação irá expor
 EXPOSE 8080
-CMD ["node", "dist/main.js"]
+
+# Comando para rodar a aplicação
+# Primeiro, ele aplica as migrações (só vai rodar se houver migrações pendentes)
+# e depois inicia a aplicação NestJS.
+CMD npx prisma migrate deploy && node dist/main.js
