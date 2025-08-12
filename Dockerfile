@@ -5,8 +5,11 @@ FROM node:22 AS build
 # Define o diretório de trabalho na raiz do contêiner
 WORKDIR /usr/src/app
 
-# Copia todo o conteúdo do seu repositório para o contêiner
-COPY . .
+# Copia os arquivos de configuração do monorepo e do backend
+COPY package*.json ./
+COPY tsconfig*.json ./
+COPY ./backend/package*.json ./backend/
+COPY ./backend/tsconfig*.json ./backend/
 
 # Define o diretório de trabalho para a pasta 'backend'
 WORKDIR /usr/src/app/backend
@@ -21,13 +24,19 @@ RUN npm install
 # Instala o cliente psql para depuração
 RUN apt-get update && apt-get install -y postgresql-client
 
+# Copia o restante do código da sua aplicação
+COPY . .
+
 # Constrói a aplicação NestJS
 RUN npm run build
 
+# Adiciona um passo de diagnóstico para listar o conteúdo da pasta `dist`
+# Isso nos ajudará a entender qual arquivo está sendo gerado
+RUN ls -l dist
 
 # Stage 2: Create a production-ready image
 # Usa uma imagem Node.js 22 para produção, que é mais leve
-FROM node:22-alpine AS production
+FROM node:22 AS production
 
 # Define o diretório de trabalho para a pasta 'backend'
 WORKDIR /usr/src/app/backend
