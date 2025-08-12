@@ -18,6 +18,9 @@ RUN chown -R node:node /usr/src/app
 # Instala as dependências, que estão no package.json do backend
 RUN npm install
 
+# Instala o cliente psql para depuração
+RUN apt-get update && apt-get install -y postgresql-client
+
 # Constrói a aplicação NestJS
 RUN npm run build
 
@@ -35,8 +38,10 @@ COPY --from=build /usr/src/app/backend/dist ./dist
 COPY --from=build /usr/src/app/backend/prisma ./prisma
 
 # Define a porta que a aplicação irá expor
+# A porta 8080 é a porta padrão que o Cloud Run espera
 EXPOSE 8080
 
 # Comando para rodar a aplicação
-# Ele executa as migrações do Prisma e depois inicia o servidor
-CMD ["/bin/sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# Removemos a migração do CMD para evitar a falha de build.
+# A migração será feita manualmente após o deploy.
+CMD ["node", "dist/main.js"]
