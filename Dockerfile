@@ -1,45 +1,47 @@
-# Stage 1: Build a development image with all dependencies
-# Usa uma imagem Node.js 22 para o build
-FROM node:22 AS build
+# Stage 1: Build Image
+# Usa uma imagem oficial do Node.js como base
+FROM node:22-alpine AS build
 
-# Define o diretório de trabalho na raiz do contêiner
-WORKDIR /usr/src/app
-
-# Copia todo o conteúdo do seu repositório para o contêiner
-COPY . .
-
-# Define o diretório de trabalho para a pasta 'backend'
+# Define o diretório de trabalho dentro do container
+# O Railway clona o seu repositório no diretório raiz do container,
+# então o WORKDIR deve ser o diretório da sua aplicação (backend)
 WORKDIR /usr/src/app/backend
 
-# Adiciona o comando para garantir que o usuário 'node' tenha permissão de escrita
-# para o diretório de trabalho
-RUN chown -R node:node /usr/src/app
+# Copia os arquivos de definição de dependência (package.json e afins)
+# Isso permite que o Docker cache a camada de dependências
+COPY package*.json ./
 
-# Instala as dependências, que estão no package.json do backend
+# Instala as dependências, incluindo as de desenvolvimento
 RUN npm install
 
-# Constrói a aplicação NestJS
-# Usando o comando 'build' dentro do backend, conforme a estrutura do monorepo
+# Copia todo o restante do código da sua aplicação
+COPY . .
+
+# Gera o cliente do Prisma. Isso garante que o binário do Prisma
+# seja compatível com a arquitetura do container.
+RUN npx prisma generate
+
+# Executa o build da sua aplicação NestJS
 RUN npm run build
 
 
-# Stage 2: Create a production-ready image
-# Usa uma imagem Node.js 22 para produção, que é mais leve
-FROM node:22 AS production
+# Stage 2: Production Image
+# Cria uma imagem mais leve para produção
+FROM node:22-alpine AS production
 
-# Define o diretório de trabalho para a pasta 'backend'
+# Define o diretório de trabalho da aplicação
 WORKDIR /usr/src/app/backend
 
-# Copia apenas os arquivos essenciais da etapa de build
+# Copia apenas os arquivos essenciais da imagem de build
+COPY --from=build /usr/src/app/backend/package*.json ./
 COPY --from=build /usr/src/app/backend/node_modules ./node_modules
 COPY --from=build /usr/src/app/backend/dist ./dist
 COPY --from=build /usr/src/app/backend/prisma ./prisma
 
 # Define a porta que a aplicação irá expor
-# A porta 8080 é a porta padrão que o Cloud Run espera
 EXPOSE 8080
 
 # Comando para rodar a aplicação
-# Removemos a migração do CMD para evitar a falha de build.
-# A migração será feita manualmente após o deploy.
-CMD ["node", "dist/main.js"]
+# Primeiro, ele aplica as migrações (só vai rodar se houver migrações pendentes)
+# e depois inicia a aplicação NestJS.
+CMD npx prisma migrate deploy && node dist/main.js
