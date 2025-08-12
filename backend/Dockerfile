@@ -1,6 +1,5 @@
-# Stage 1: Build a development image with all dependencies
-# Usa uma imagem Node.js 22 para o build
-FROM node:22 AS build
+# Usa a imagem oficial do Node.js como base
+FROM node:22-alpine
 
 # Define o diretório de trabalho na raiz do contêiner
 WORKDIR /usr/src/app
@@ -19,24 +18,10 @@ RUN chown -R node:node /usr/src/app
 RUN npm install
 
 # Instala o cliente psql para depuração
-RUN apt-get update && apt-get install -y postgresql-client
+RUN apk update && apk add postgresql-client
 
 # Constrói a aplicação NestJS
 RUN npm run build
-
-
-# Stage 2: Create a production-ready image
-# Usa uma imagem Node.js 22 para produção, que é mais leve
-FROM node:22-alpine AS production
-
-# Define o diretório de trabalho para a pasta 'backend'
-WORKDIR /usr/src/app/backend
-
-# Copia apenas os arquivos essenciais da etapa de build
-COPY --from=build /usr/src/app/backend/node_modules ./node_modules
-COPY --from=build /usr/src/app/backend/dist ./dist
-COPY --from=build /usr/src/app/backend/prisma ./prisma
-COPY --from=build /usr/src/app/backend/package*.json ./
 
 # Define a porta que a aplicação irá expor
 # A porta 8080 é a porta padrão que o Cloud Run espera
