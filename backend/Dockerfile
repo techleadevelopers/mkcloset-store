@@ -3,25 +3,22 @@
 FROM node:22 AS build 
 
 # Define o diretório de trabalho na raiz do projeto.
-# Esta é a principal mudança para resolver o erro de arquivos não encontrados.
+# O Docker irá copiar todos os arquivos para cá.
 WORKDIR /usr/src/app
 
-# Copia os arquivos de definição de dependências e instala as dependências do projeto.
-# A instrução 'COPY' agora considera o diretório de trabalho na raiz do projeto.
-COPY backend/package*.json ./backend/
+# Copia as pastas backend e client para o container.
+# O ponto final (.) significa 'toda a raiz do projeto'.
+COPY . .
 
 # Define o WORKDIR para a pasta do backend
 WORKDIR /usr/src/app/backend
 
 # Instala as dependências.
+# A partir de agora, todos os comandos são executados na pasta 'backend'.
 RUN npm install
 
-# Copia todo o restante do código do backend para o diretório de trabalho.
-# A partir daqui, o Dockerfile trabalha apenas dentro da pasta 'backend'.
-COPY backend .
-
-# Agora os comandos serão executados dentro de /usr/src/app.
-RUN npx prisma generate # Isso agora gerará o engine debian-openssl-3.0.x
+# Agora os comandos serão executados dentro de /usr/src/app/backend.
+RUN npx prisma generate
 
 # Constrói a aplicação.
 RUN npm run build
@@ -33,7 +30,7 @@ FROM node:22 AS production
 # Define o diretório de trabalho na raiz do projeto.
 WORKDIR /usr/src/app/backend
 
-# Copia apenas os arquivos necessários da etapa de construção para o novo diretório de trabalho.
+# Copia apenas os arquivos necessários da etapa de construção.
 COPY --from=build /usr/src/app/backend/node_modules ./node_modules
 COPY --from=build /usr/src/app/backend/dist ./dist
 COPY --from=build /usr/src/app/backend/node_modules/.prisma/client ./node_modules/.prisma/client
