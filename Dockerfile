@@ -11,6 +11,10 @@ COPY . .
 # Define o diretório de trabalho para a pasta 'backend'
 WORKDIR /usr/src/app/backend
 
+# Adiciona o comando para garantir que o usuário 'node' tenha permissão de escrita
+# para o diretório de trabalho
+RUN chown -R node:node /usr/src/app
+
 # Instala as dependências, que estão no package.json do backend
 RUN npm install
 
