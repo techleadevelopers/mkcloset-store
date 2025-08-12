@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+// src/config/config.service.ts
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService as NestConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -33,9 +34,53 @@ export class ConfigService {
   get pagSeguroApiToken(): string {
     const token = this.nestConfigService.get<string>('PAGSEGURO_API_TOKEN');
     if (!token) {
-        throw new Error('A variável de ambiente PAGSEGURO_API_TOKEN não está definida.');
+        throw new InternalServerErrorException('A variável de ambiente PAGSEGURO_API_TOKEN não está definida.');
     }
     return token;
+  }
+
+  // NOVO: Segredo para verificação de assinatura de webhook do PagSeguro
+  get pagSeguroWebhookSecret(): string {
+    const secret = this.nestConfigService.get<string>('PAGSEGURO_WEBHOOK_SECRET');
+    if (!secret) {
+        // Em ambiente de produção, considere lançar um erro ou ter um valor padrão seguro.
+        // Para desenvolvimento, um log de aviso pode ser suficiente.
+        console.warn('A variável de ambiente PAGSEGURO_WEBHOOK_SECRET não está definida. Webhooks podem não ser verificados.');
+        return 'your-default-webhook-secret-for-dev'; // Apenas para desenvolvimento
+    }
+    return secret;
+  }
+  // -----------------------------------
+
+  // --- Configurações do Provedor de E-mail ---
+  get emailServiceHost(): string {
+    return this.nestConfigService.get<string>('EMAIL_SERVICE_HOST') || '';
+  }
+
+  get emailServicePort(): number {
+    return this.nestConfigService.get<number>('EMAIL_SERVICE_PORT') || 587;
+  }
+
+  get emailServiceUser(): string {
+    return this.nestConfigService.get<string>('EMAIL_SERVICE_USER') || '';
+  }
+
+  get emailServicePass(): string {
+    return this.nestConfigService.get<string>('EMAIL_SERVICE_PASS') || '';
+  }
+
+  get emailServiceFrom(): string {
+    return this.nestConfigService.get<string>('EMAIL_SERVICE_FROM') || 'no-reply@yourdomain.com';
+  }
+  // -----------------------------------
+
+  // --- Configurações da Ferramenta Antifraude ---
+  get antifraudApiUrl(): string {
+    return this.nestConfigService.get<string>('ANTIFRAUD_API_URL') || '';
+  }
+
+  get antifraudApiKey(): string {
+    return this.nestConfigService.get<string>('ANTIFRAUD_API_KEY') || '';
   }
   // -----------------------------------
 }

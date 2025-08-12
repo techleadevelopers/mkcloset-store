@@ -1,5 +1,5 @@
 // src/orders/orders.controller.ts
-import { Controller, Post, Body, Param, UseGuards, Get } from '@nestjs/common';
+import { Controller, Post, Body, Param, UseGuards, Get, Query, BadRequestException } from '@nestjs/common'; // NOVO: Adicionado Query e BadRequestException
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OptionalJwtAuthGuard } from 'src/auth/guards/optional-jwt-auth.guard';
@@ -37,5 +37,19 @@ export class OrdersController {
   @Get(':id')
   async findOne(@CurrentUser() user: User, @Param('id') id: string) {
     return this.ordersService.findOneByUserId(user.id, id);
+  }
+
+  // NOVO ENDPOINT: Rastreamento de pedidos para convidados
+  // Pode ser acessado sem autenticação, mas exige o guestId (ou email) para validação
+  @Get('track/:orderId')
+  async trackGuestOrder(
+    @Param('orderId') orderId: string,
+    @Query('guestId') guestId: string, // Ou @Query('email') email: string
+  ) {
+    // É crucial que o guestId seja passado para validar se o convidado tem acesso ao pedido
+    if (!guestId) {
+      throw new BadRequestException('O ID do convidado (guestId) é obrigatório para rastrear o pedido.');
+    }
+    return this.ordersService.findOneByGuestId(guestId, orderId);
   }
 }

@@ -275,3 +275,78 @@ Constantes Globais (AppConstants): Centraliza valores mágicos, tornando-os fác
 Simulações de Gateway: As simulações para PagSeguro (cartão/boleto) e Correios indicam pontos onde integrações reais com APIs externas seriam implementadas. Para manutenção, estas seriam as primeiras áreas a serem substituídas por implementações reais.
 Comentários e Logs: O código contém comentários explicativos e logs (Logger) em pontos estratégicos, o que é crucial para entender o fluxo e depurar problemas em produção.
 Esta documentação serve como um guia abrangente para entender a estrutura, o fluxo e a lógica de cada componente do sistema de e-commerce, facilitando a manutenção, a depuração e o desenvolvimento de novas funcionalidades.
+
+Relatório de Integrações e Modificações no Backend NestJS
+Este relatório descreve as principais alterações e adições feitas na estrutura do seu projeto NestJS para incluir funcionalidades de administração, controle de acesso baseado em papéis (RBAC), manipulação de rawBody para webhooks e atualizações no esquema do banco de dados.
+
+1. Configuração da Aplicação Principal (src/main.ts)
+O arquivo main.ts, que é o ponto de entrada da sua aplicação, foi aprimorado com as seguintes configurações:
+
+Habilitação de CORS: Mantida a configuração para permitir requisições do frontend (http://localhost:5173), essencial para o desenvolvimento. É crucial ajustar origin para o domínio de produção quando a aplicação for para o ambiente real.
+Validação Global de DTOs (ValidationPipe): Mantida a configuração do ValidationPipe global. Isso garante que todos os Data Transfer Objects (DTOs) usados nos seus controladores sejam automaticamente validados, transformados e que propriedades não esperadas sejam removidas ou causem erro, aumentando a segurança e robustez da API.
+Middleware para rawBody: Esta foi uma adição crucial. Um middleware json do express foi configurado com uma função verify para capturar o rawBody (corpo bruto da requisição). Isso é fundamental para processar webhooks de gateways de pagamento (como PagSeguro, Stripe, etc.) que exigem a verificação da assinatura do payload original para garantir a autenticidade da requisição. Este middleware deve ser aplicado antes de qualquer outro parser de corpo.
+2. Módulo Principal da Aplicação (src/app.module.ts)
+O módulo raiz AppModule foi atualizado para orquestrar as novas funcionalidades:
+
+ServeStaticModule: Configurado para servir arquivos estáticos, especificamente uploads (como imagens de produtos), através da rota /images.
+ConfigModule (NestJS): Mantida a configuração global para carregar e gerenciar variáveis de ambiente.
+ConfigModule (Customizado): Mantida a importação do seu módulo de configuração customizado, se ele existir e for usado para configurações específicas da aplicação.
+Módulos Existentes: Todos os módulos de funcionalidades principais (Prisma, Auth, Users, Categories, Products, Cart, Wishlist, Orders, Payments, Shipping, Inventory, Common) foram mantidos.
+Novos Módulos Integrados:
+NotificationsModule: Adicionado para gerenciar o envio de notificações (e-mails, SMS, etc.).
+AntifraudModule: Adicionado para integrar com serviços de análise antifraude.
+AdminModule: Adicionado para encapsular as funcionalidades de administração da plataforma.
+3. Módulo Administrativo (src/admin/)
+O AdminModule foi estruturado para centralizar as operações administrativas:
+
+AdminService (Novo):
+Foi criado o src/admin/admin.service.ts para conter a lógica de negócios das operações administrativas.
+Ele injeta e utiliza outros serviços como RefundsService, AntifraudService, OrdersService e PrismaService para realizar suas tarefas.
+Métodos como processRefund, updateTransactionAntifraudStatus e getAllOrdersForAdmin foram definidos para demonstrar as capacidades.
+AdminController (Atualizado):
+O src/admin/admin.controller.ts foi atualizado para injetar o AdminService e delegar as chamadas de API a ele.
+Proteção de Rotas: Todas as rotas do AdminController foram protegidas com JwtAuthGuard (para autenticação) e RolesGuard (para autorização).
+@Roles(Role.ADMIN): O decorator @Roles foi aplicado para garantir que apenas usuários com o papel ADMIN possam acessar os endpoints administrativos.
+AdminModule (Atualizado):
+O src/admin/admin.module.ts foi configurado para importar os módulos necessários (PrismaModule, PaymentsModule, OrdersModule, AntifraudModule) e para fornecer o AdminService e o AdminController.
+4. Controle de Acesso Baseado em Papéis (RBAC)
+Foi implementado um sistema básico de RBAC:
+
+Roles Decorator (src/common/decorators/roles.decorator.ts):
+Criado o decorator @Roles que utiliza SetMetadata para anexar uma lista de papéis permitidos a métodos ou classes de controladores.
+Define a constante ROLES_KEY para identificar esses metadados.
+RolesGuard (src/common/guards/roles.guard.ts):
+Implementado o RolesGuard que, usando o Reflector do NestJS, lê os papéis definidos pelo @Roles decorator na rota.
+Compara os papéis requeridos com o papel do usuário autenticado (assumindo que o JwtAuthGuard já anexou o objeto user à requisição).
+Garante que apenas usuários com os papéis apropriados possam acessar as rotas protegidas.
+5. Atualizações no Esquema do Banco de Dados (schema.prisma)
+O arquivo schema.prisma foi significativamente atualizado para suportar as novas funcionalidades e corrigir a omissão do Role enum:
+
+enum Role (NOVO):
+Definido o enum Role com valores como USER e ADMIN. Este enum é fundamental para o sistema de RBAC.
+Campo role no User (NOVO):
+Adicionado o campo role ao modelo User, do tipo Role e com um valor padrão de USER. Isso permite atribuir papéis aos usuários.
+antifraudStatus na Transaction (NOVO):
+Adicionado o campo antifraudStatus ao modelo Transaction. Este campo do tipo String pode ser usado para armazenar o status da análise antifraude (ex: "PENDING_REVIEW", "ACCEPTED", "DENIED"), permitindo o acompanhamento e a gestão dessas análises.
+Campos de Convidado (guestCpf, etc.) e boletoUrl:
+Mantidos e confirmados os campos guestCpf no modelo Order e boletoUrl no modelo Transaction, que foram discutidos anteriormente para suportar pedidos de convidados e pagamentos via boleto.
+Próximos Passos Essenciais:
+Para que todas essas mudanças entrem em vigor no seu ambiente de desenvolvimento e produção:
+
+Executar Migrações do Prisma:
+
+bash
+
+Copiar
+npx prisma migrate dev --name add_user_role_and_antifraud_status
+Este comando criará e aplicará uma nova migração ao seu banco de dados, adicionando o enum Role, o campo role na tabela User e o campo antifraudStatus na tabela Transaction.
+
+Gerar o Cliente Prisma:
+
+bash
+
+Copiar
+npx prisma generate
+Isso é crucial para atualizar o cliente Prisma em seu projeto, garantindo que as tipagens TypeScript para os novos campos e enums (especialmente o Role) estejam disponíveis e corretas, resolvendo quaisquer erros de compilação relacionados a tipos não encontrados.
+
+Com essas integrações, sua aplicação NestJS está mais robusta, segura e preparada para gerenciar usuários com diferentes níveis de acesso e lidar com a complexidade de transações financeiras, incluindo aspectos antifraude.

@@ -1,6 +1,6 @@
 // src/users/entities/user.entity.ts
 
-import { User as PrismaUser } from '@prisma/client';
+import { User as PrismaUser, Role } from '@prisma/client'; // ADICIONADO: Importe 'Role'
 
 export class UserEntity implements PrismaUser {
   id: string;
@@ -11,6 +11,7 @@ export class UserEntity implements PrismaUser {
   cpf: string | null; // ADICIONADO: Propriedade 'cpf' para corresponder ao schema.prisma
   createdAt: Date;
   updatedAt: Date;
+  role: Role; // CORREÇÃO: Adicionada a propriedade 'role'
 
   // Construtor para transformar dados (opcional, mas útil)
   constructor(partial: Partial<UserEntity>) {

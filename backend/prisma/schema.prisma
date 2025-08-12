@@ -26,6 +26,13 @@ enum TransactionType {
   REFUND     // Reembolso de um pedido
 }
 
+// NOVO: Enum para papéis de usuário
+enum Role {
+  USER   // Usuário comum
+  ADMIN  // Administrador
+  // Você pode adicionar outros papéis aqui, como MANAGER, EDITOR, etc.
+}
+
 // Usuários
 model User {
   id         String         @id @default(uuid())
@@ -34,6 +41,7 @@ model User {
   name       String?
   phone      String?
   cpf        String?        // ADICIONADO: Campo CPF
+  role       Role           @default(USER) // NOVO: Campo para o papel do usuário
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
   addresses  Address[]
@@ -217,6 +225,7 @@ model Transaction {
   boletoUrl            String?       // ADICIONADO: Campo para URL do Boleto
 
   transactionRef       String?
+  antifraudStatus      String?       // NOVO: Campo para o status da análise antifraude (ex: PENDING_REVIEW, ACCEPTED, DENIED)
 
   couponId             String?
   coupon               Coupon?       @relation(fields: [couponId], references: [id])

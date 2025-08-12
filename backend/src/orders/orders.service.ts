@@ -5,8 +5,9 @@ import { CartService } from 'src/cart/cart.service';
 import { UsersService } from 'src/users/users.service';
 import { ProductsService } from 'src/products/products.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { OrderStatus, Prisma, Order, User } from '@prisma/client'; // Importe Order e User
+import { OrderStatus, Prisma, Order, User } from '@prisma/client';
 import { ProductEntity } from 'src/products/entities/product.entity';
+import { NotificationsService } from 'src/notifications/notifications.service'; // NOVO: Importe o serviço de notificações
 
 // Opcional: Tipo para o pedido com as relações que esperamos carregar
 // Isso ajuda o TypeScript a entender a estrutura do objeto 'order'
@@ -39,6 +40,7 @@ export class OrdersService {
     private cartService: CartService,
     private usersService: UsersService,
     private productsService: ProductsService,
+    private notificationsService: NotificationsService, // NOVO: Injete o serviço de notificações
   ) {}
 
   /**
@@ -244,6 +246,17 @@ export class OrdersService {
 
       return newOrder;
     });
+
+    // NOVO: Enviar e-mail de confirmação de pedido
+    try {
+        const recipientEmail = finalUserId ? (await this.usersService.findOne(finalUserId)).email : guestContactInfo?.email;
+        if (recipientEmail) {
+            await this.notificationsService.sendOrderConfirmationEmail(recipientEmail, order.id, order.totalAmount.toNumber());
+        }
+    } catch (emailError) {
+        this.notificationsService.logger.error(`Falha ao enviar e-mail de confirmação para o pedido ${order.id}: ${emailError.message}`);
+        // Não relança o erro para não impedir a criação do pedido
+    }
 
     return order;
   }

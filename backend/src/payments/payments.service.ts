@@ -1,11 +1,16 @@
 // src/payments/payments.service.ts
-import { Injectable, InternalServerErrorException, BadRequestException, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, BadRequestException, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common'; // NOVO: UnauthorizedException
 import { PrismaService } from 'src/prisma/prisma.service';
 import { OrdersService } from 'src/orders/orders.service';
 import { OrderStatus, TransactionType, Order, User, Prisma } from '@prisma/client';
 import { PagSeguroService } from './providers/pagseguro.service';
 import { CreatePixChargeDto, PixChargeResponseDto } from './dto/create-pix-charge.dto';
+import { ProcessPaymentDto } from './dto/process-payment.dto'; // NOVO: Importe o DTO
 import { Decimal } from '@prisma/client/runtime/library';
+import { ConfigService } from 'src/config/config.service'; // NOVO: Importe o ConfigService
+import { NotificationsService } from 'src/notifications/notifications.service'; // NOVO: Importe o NotificationsService
+import { AntifraudService } from 'src/antifraud/antifraud.service'; // NOVO: Importe o AntifraudService
+import * as crypto from 'crypto'; // NOVO: Para verificação de assinatura
 
 type OrderWithDetails = Order & {
     user?: User | null;
@@ -28,6 +33,9 @@ export class PaymentsService {
         private readonly prisma: PrismaService,
         private readonly ordersService: OrdersService,
         private readonly pagSeguroService: PagSeguroService,
+        private readonly configService: ConfigService, // NOVO: Injete o ConfigService
+        private readonly notificationsService: NotificationsService, // NOVO: Injete o NotificationsService
+        private readonly antifraudService: AntifraudService, // NOVO: Injete o AntifraudService
     ) {}
 
     // Implementação da nova API de pagamentos (PIX)
@@ -58,6 +66,21 @@ export class PaymentsService {
         }));
 
         try {
+            // NOVO: Chamada ao serviço antifraude antes de iniciar o pagamento
+            const antifraudResult = await this.antifraudService.analyzeTransaction({
+                orderId: order.id,
+                amount: order.totalAmount.toNumber(),
+                customerEmail: clientEmail,
+                customerCpf: clientCpf,
+                paymentMethod: 'PIX',
+                items: order.items.map(item => ({ productId: item.product.id, quantity: item.quantity, price: item.price.toNumber() })),
+            });
+
+            if (antifraudResult.status === 'DENIED') {
+                throw new BadRequestException('Transação negada pela análise antifraude.');
+            }
+            // Se o status for 'PENDING_REVIEW' ou 'ACCEPTED', o fluxo continua.
+
             const pagSeguroResponse = await this.pagSeguroService.createPagSeguroPixCharge({
                 orderId: order.id,
                 amount: order.totalAmount,
@@ -93,6 +116,7 @@ export class PaymentsService {
                     description: `Cobrança PIX para Pedido #${order.id}`,
                     gatewayTransactionId: pagSeguroResponse.transactionId,
                     transactionRef: pagSeguroResponse.brCode,
+                    antifraudStatus: antifraudResult.status, // NOVO: Salva o status antifraude
                 },
             });
 
@@ -104,6 +128,128 @@ export class PaymentsService {
                 throw error;
             }
             throw new InternalServerErrorException('Falha ao iniciar o processo de pagamento PIX com PagSeguro.');
+        }
+    }
+
+    // NOVO: Método para processar pagamentos diretos com cartão de crédito
+    async processCreditCardPayment(orderId: string, userId: string | undefined, processPaymentDto: ProcessPaymentDto): Promise<any> {
+        const { cardToken, cardHolderName, cardCpf, cardInstallments, cardBrand } = processPaymentDto;
+
+        if (!cardToken || !cardHolderName || !cardCpf) {
+            throw new BadRequestException('Dados do cartão incompletos para processamento direto.');
+        }
+
+        const order: OrderWithDetails = await this.ordersService.findOneById(orderId);
+
+        if (!order) {
+            throw new NotFoundException(`Pedido com ID ${orderId} não encontrado.`);
+        }
+
+        if (order.status !== OrderStatus.PENDING) {
+            throw new BadRequestException('O pedido já foi pago ou está em outro status.');
+        }
+
+        if (order.userId && userId && order.userId !== userId) {
+            throw new BadRequestException('Acesso não autorizado a este pedido.');
+        }
+
+        const clientEmail: string = order.user?.email ?? order.guestEmail ?? '';
+        const clientFullName: string = order.user?.name ?? 'Cliente Convidado';
+        const clientPhone: string = order.user?.phone ?? order.guestPhone ?? '';
+        const clientCpf: string | undefined = order.user?.cpf ?? (order.guestCpf || undefined);
+
+        const items = order.items.map(item => ({
+            name: item.product.name,
+            quantity: item.quantity,
+            unit_amount: new Decimal(item.price),
+        }));
+
+        try {
+            // NOVO: Chamada ao serviço antifraude antes de iniciar o pagamento
+            const antifraudResult = await this.antifraudService.analyzeTransaction({
+                orderId: order.id,
+                amount: order.totalAmount.toNumber(),
+                customerEmail: clientEmail,
+                customerCpf: clientCpf,
+                paymentMethod: 'CREDIT_CARD',
+                items: order.items.map(item => ({ productId: item.product.id, quantity: item.quantity, price: item.price.toNumber() })),
+                cardDetails: { brand: cardBrand, installments: cardInstallments },
+            });
+
+            if (antifraudResult.status === 'DENIED') {
+                throw new BadRequestException('Transação negada pela análise antifraude.');
+            }
+
+            const pagSeguroResponse = await this.pagSeguroService.processDirectCreditCardPayment({
+                orderId: order.id,
+                amount: order.totalAmount,
+                description: `Pagamento do Pedido #${order.id} na MKCloset`,
+                customer: {
+                    email: clientEmail,
+                    fullName: clientFullName,
+                    phone: clientPhone,
+                    cpf: clientCpf,
+                },
+                shippingAddress: {
+                    cep: order.shippingAddressZipCode,
+                    street: order.shippingAddressStreet,
+                    number: order.shippingAddressNumber,
+                    complement: order.shippingAddressComplement ?? undefined,
+                    neighborhood: order.shippingAddressNeighborhood,
+                    city: order.shippingAddressCity,
+                    state: order.shippingAddressState,
+                },
+                shippingService: order.shippingService,
+                shippingPrice: order.shippingPrice,
+                items: items,
+                cardDetails: {
+                    token: cardToken,
+                    holderName: cardHolderName,
+                    cpf: cardCpf,
+                    installments: cardInstallments,
+                }
+            });
+
+            // Cria/Atualiza a transação no banco de dados
+            await this.prisma.transaction.create({
+                data: {
+                    userId: order.userId || null,
+                    orderId: order.id,
+                    amount: order.totalAmount,
+                    type: TransactionType.PAYMENT,
+                    status: pagSeguroResponse.status, // Status retornado pelo PagSeguro (ex: APPROVED, PENDING)
+                    description: `Pagamento com Cartão de Crédito para Pedido #${order.id}`,
+                    gatewayTransactionId: pagSeguroResponse.transactionId,
+                    transactionRef: pagSeguroResponse.transactionRef,
+                    antifraudStatus: antifraudResult.status, // Salva o status antifraude
+                },
+            });
+
+            // Atualiza o status do pedido se o pagamento foi aprovado
+            if (pagSeguroResponse.status === OrderStatus.PAID) {
+                await this.prisma.order.update({
+                    where: { id: order.id },
+                    data: { status: OrderStatus.PAID },
+                });
+                // NOVO: Enviar e-mail de confirmação de pagamento
+                try {
+                    const recipientEmail = order.user?.email ?? order.guestEmail;
+                    if (recipientEmail) {
+                        await this.notificationsService.sendPaymentConfirmationEmail(recipientEmail, order.id, order.totalAmount.toNumber());
+                    }
+                } catch (emailError) {
+                    this.logger.error(`Falha ao enviar e-mail de confirmação de pagamento para o pedido ${order.id}: ${emailError.message}`);
+                }
+            }
+
+            return pagSeguroResponse;
+
+        } catch (error) {
+            this.logger.error(`Erro ao processar pagamento com cartão para o pedido ${orderId}: ${error.message}`, error.stack);
+            if (error instanceof InternalServerErrorException && error.message.startsWith('Falha no PagSeguro:')) {
+                throw error;
+            }
+            throw new InternalServerErrorException('Falha ao processar pagamento com cartão de crédito.');
         }
     }
 
@@ -136,6 +282,20 @@ export class PaymentsService {
         }));
 
         try {
+            // NOVO: Chamada ao serviço antifraude antes de iniciar o pagamento
+            const antifraudResult = await this.antifraudService.analyzeTransaction({
+                orderId: order.id,
+                amount: order.totalAmount.toNumber(),
+                customerEmail: clientEmail,
+                customerCpf: clientCpf,
+                paymentMethod: 'REDIRECT_CHECKOUT',
+                items: order.items.map(item => ({ productId: item.product.id, quantity: item.quantity, price: item.price.toNumber() })),
+            });
+
+            if (antifraudResult.status === 'DENIED') {
+                throw new BadRequestException('Transação negada pela análise antifraude.');
+            }
+
             const pagSeguroResponse = await this.pagSeguroService.createPagSeguroCheckoutRedirect({
                 orderId: order.id,
                 amount: order.totalAmount,
@@ -170,6 +330,7 @@ export class PaymentsService {
                     description: `Iniciação de pagamento via PagSeguro Checkout para Pedido #${order.id}`,
                     gatewayTransactionId: pagSeguroResponse.pagSeguroCheckoutId,
                     transactionRef: pagSeguroResponse.redirectUrl,
+                    antifraudStatus: antifraudResult.status, // NOVO: Salva o status antifraude
                 },
             });
 
@@ -184,8 +345,18 @@ export class PaymentsService {
         }
     }
 
-    async handlePagSeguroNotification(pagSeguroCheckoutId: string) {
+    async handlePagSeguroNotification(pagSeguroCheckoutId: string, signature: string, rawBody: string) {
         this.logger.log(`[PaymentsService] Webhook do PagSeguro recebido para checkout ID: ${pagSeguroCheckoutId}`);
+
+        // NOVO: Verificação de assinatura do webhook
+        const webhookSecret = this.configService.pagSeguroWebhookSecret;
+        const expectedSignature = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
+
+        if (signature !== expectedSignature) {
+            this.logger.error(`[PaymentsService] Assinatura do webhook inválida para checkout ID: ${pagSeguroCheckoutId}.`);
+            throw new UnauthorizedException('Assinatura do webhook inválida.');
+        }
+        this.logger.log(`[PaymentsService] Assinatura do webhook verificada com sucesso para checkout ID: ${pagSeguroCheckoutId}.`);
 
         const checkoutDetails = await this.pagSeguroService.getCheckoutDetails(pagSeguroCheckoutId);
         const pagSeguroTransactionStatus = checkoutDetails.status || checkoutDetails.charges?.[0]?.status || 'PENDING';
@@ -218,6 +389,25 @@ export class PaymentsService {
         ]);
 
         this.logger.log(`Status do pedido ${transaction.order.id} atualizado para ${newOrderStatus} via webhook do PagSeguro.`);
+        
+        // NOVO: Enviar e-mail de notificação de status de pagamento
+        try {
+            const recipientEmail = transaction.order.userId 
+                ? (await this.ordersService.findOneById(transaction.order.id)).user?.email 
+                : transaction.order.guestEmail;
+            
+            if (recipientEmail) {
+                if (newOrderStatus === OrderStatus.PAID) {
+                    await this.notificationsService.sendPaymentConfirmationEmail(recipientEmail, transaction.order.id, transaction.order.totalAmount.toNumber());
+                } else if (newOrderStatus === OrderStatus.CANCELLED) {
+                    await this.notificationsService.sendPaymentCancellationEmail(recipientEmail, transaction.order.id);
+                }
+                // Adicione outras notificações de status conforme necessário (ex: SHIPPED, DELIVERED)
+            }
+        } catch (emailError) {
+            this.logger.error(`Falha ao enviar e-mail de status de pagamento para o pedido ${transaction.order.id}: ${emailError.message}`);
+        }
+
         return { message: 'Status do pedido atualizado com sucesso' };
     }
 
