@@ -27,7 +27,7 @@ RUN npm run build
 
 # Stage 2: Create a production-ready image
 # Usa uma imagem Node.js 22 para produção, que é mais leve
-FROM node:22 AS production
+FROM node:22-alpine AS production
 
 # Define o diretório de trabalho para a pasta 'backend'
 WORKDIR /usr/src/app/backend
@@ -36,6 +36,7 @@ WORKDIR /usr/src/app/backend
 COPY --from=build /usr/src/app/backend/node_modules ./node_modules
 COPY --from=build /usr/src/app/backend/dist ./dist
 COPY --from=build /usr/src/app/backend/prisma ./prisma
+COPY --from=build /usr/src/app/backend/package*.json ./
 
 # Define a porta que a aplicação irá expor
 # A porta 8080 é a porta padrão que o Cloud Run espera
