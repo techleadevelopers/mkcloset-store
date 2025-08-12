@@ -1,56 +1,42 @@
 # Stage 1: Build a development image with all dependencies
-# Usa uma imagem Node.js 22 para o build
-FROM node:22 AS build
+# Usando a imagem Node.js 22 COMPLETA.
+FROM node:22 AS build 
 
-# Define o diretório de trabalho na raiz do contêiner
-WORKDIR /usr/src/app
-
-# Copia os arquivos de configuração do monorepo e do backend
-COPY package*.json ./
-COPY tsconfig*.json ./
-COPY ./backend/package*.json ./backend/
-COPY ./backend/tsconfig*.json ./backend/
-
-# Define o diretório de trabalho para a pasta 'backend'
+# Define o diretório de trabalho como a pasta do backend
+# ESSA É A PRINCIPAL MUDANÇA PARA RESOLVER O ERRO DO PRISMA
 WORKDIR /usr/src/app/backend
 
-# Adiciona o comando para garantir que o usuário 'node' tenha permissão de escrita
-# para o diretório de trabalho
-RUN chown -R node:node /usr/src/app
+# Copia os arquivos de configuração do npm para o diretório de trabalho
+# A instrução 'COPY' agora leva em consideração a nova pasta de trabalho
+COPY ./backend/package*.json ./
 
-# Instala as dependências, que estão no package.json do backend
+# Instala as dependências
 RUN npm install
 
-# Instala o cliente psql para depuração
-RUN apt-get update && apt-get install -y postgresql-client
+# Copia todo o restante do código do backend para o diretório de trabalho
+COPY ./backend .
 
-# Copia o restante do código da sua aplicação
-COPY . .
+# Agora os comandos serão executados dentro de /usr/src/app/backend
+RUN npx prisma generate # Isso agora gerará o engine debian-openssl-3.0.x
 
-# Constrói a aplicação NestJS
 RUN npm run build
 
-# Adiciona um passo de diagnóstico para listar o conteúdo da pasta `dist`
-# Isso nos ajudará a entender qual arquivo está sendo gerado
-RUN ls -l dist
 
 # Stage 2: Create a production-ready image
-# Usa uma imagem Node.js 22 para produção, que é mais leve
-FROM node:22 AS production
+FROM node:22 AS production 
 
-# Define o diretório de trabalho para a pasta 'backend'
+# Define o diretório de trabalho como a pasta do backend
 WORKDIR /usr/src/app/backend
 
-# Copia apenas os arquivos essenciais da etapa de build
+# A instrução 'COPY --from' precisa ser ajustada para o novo diretório
+# de trabalho na imagem de build
 COPY --from=build /usr/src/app/backend/node_modules ./node_modules
 COPY --from=build /usr/src/app/backend/dist ./dist
-COPY --from=build /usr/src/app/backend/prisma ./prisma
-COPY --from=build /usr/src/app/backend/package*.json ./
+COPY --from=build /usr/src/app/backend/node_modules/.prisma/client ./node_modules/.prisma/client
+COPY --from=build /usr/src/app/backend/prisma/schema.prisma ./prisma/schema.prisma
 
-# Define a porta que a aplicação irá expor
-# A porta 8080 é a porta padrão que o Cloud Run espera
+# A variável de ambiente DATABASE_URL DEVE ser configurada NO PAINEL DO RAILWAY.
+# Não podemos usar a sintaxe do Railway no Dockerfile.
+ENV PORT 8080
 EXPOSE 8080
-
-# Comando para rodar a aplicação
-# Ele executa as migrações do Prisma e depois inicia o servidor
-CMD ["/bin/sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+CMD ["node", "dist/main.js"]
