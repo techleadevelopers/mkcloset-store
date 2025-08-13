@@ -1,37 +1,51 @@
-# Stage 1: build do backend
-FROM node:22 AS build
-WORKDIR /app/backend
+# Stage 1: Build da aplicação NestJS
+# Usamos uma imagem Node.js completa para ter todas as ferramentas de build.
+FROM node:22-alpine AS build
 
-# Copia só o que é necessário do backend
-COPY backend/package*.json ./
-RUN npm ci
+# Define o diretório de trabalho dentro do container.
+# Todos os comandos a seguir serão executados a partir deste diretório.
+WORKDIR /app
 
-COPY backend ./
+# Copia os arquivos de configuração de dependência primeiro.
+# Isso permite que o Docker use o cache da camada se os arquivos de dependência não mudarem.
+COPY package*.json ./
 
-# Gera o Prisma Client (OpenSSL 3 no Debian)
+# Instala todas as dependências (incluindo as de desenvolvimento) para o processo de build.
+# Alteramos de 'npm ci' para 'npm install' para uma abordagem mais robusta.
+RUN npm install
+
+# Copia o restante do código da sua pasta 'backend' para o container.
+COPY . .
+
+# O Prisma precisa do gerador para criar o client antes de compilar o código.
+# Este comando é CRUCIAL para gerar os tipos de dados que sua aplicação usa.
 RUN npx prisma generate
 
-# Compila o NestJS
+# Compila o projeto NestJS para JavaScript.
+# O resultado estará na pasta 'dist'.
 RUN npm run build
 
-# Log opcional para validar onde está o main
-RUN ls -la dist && (ls -la dist/src || true)
+# --- Stage 2: Imagem final de produção ---
+# Usamos uma imagem menor ('slim') para o container final, o que reduz o tamanho da imagem.
+FROM node:22-alpine AS production
 
-# Stage 2: runtime mínimo
-FROM node:22-slim AS production
-WORKDIR /app/backend
+# Define o diretório de trabalho.
+WORKDIR /app
 
+# Define variáveis de ambiente. O Cloud Run irá sobrescrever a porta.
 ENV NODE_ENV=production
 ENV PORT=8080
 
-# Copia dependências e artefatos
-COPY --from=build /app/backend/node_modules ./node_modules
-COPY --from=build /app/backend/dist ./dist
-COPY --from=build /app/backend/prisma ./prisma
+# Copia apenas os artefatos compilados, os arquivos do Prisma e o package.json.
+# A inclusão da pasta 'node_modules' completa é crucial para o sucesso da aplicação.
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/node_modules ./node_modules
 
+# A porta que o container irá expor.
 EXPOSE 8080
 
-# Se seu build gera dist/src/main.js (mais comum no Nest):
+# Comando para iniciar a aplicação.
+# O caminho 'dist/src/main.js' é o caminho correto para o seu arquivo de inicialização.
 CMD ["node", "dist/src/main.js"]
-# Caso você ajuste seu build para dist/main.js, mude para:
-# CMD ["node", "dist/main.js"]

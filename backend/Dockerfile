@@ -1,32 +1,32 @@
-# Usa a imagem oficial do Node.js como base
+# Usamos uma imagem Node.js completa. Não há segundo estágio para copiar arquivos.
 FROM node:22-alpine
 
-# Define o diretório de trabalho na raiz do contêiner
-WORKDIR /usr/src/app
+# Define o diretório de trabalho dentro do container.
+WORKDIR /app
 
-# Copia todo o conteúdo do seu repositório para o contêiner
-COPY . .
+# Copia os arquivos de configuração de dependência.
+COPY package*.json ./
 
-# Define o diretório de trabalho para a pasta 'backend'
-WORKDIR /usr/src/app/backend
-
-# Adiciona o comando para garantir que o usuário 'node' tenha permissão de escrita
-# para o diretório de trabalho
-RUN chown -R node:node /usr/src/app
-
-# Instala as dependências, que estão no package.json do backend
+# Instala TODAS as dependências, incluindo as de desenvolvimento.
+# Isso garante que nada falte na hora de rodar a aplicação.
 RUN npm install
 
-# Instala o cliente psql para depuração
-RUN apk update && apk add postgresql-client
+# Copia o restante do código da sua pasta 'backend' para o container.
+COPY . .
 
-# Constrói a aplicação NestJS
+# O Prisma precisa do gerador.
+RUN npx prisma generate
+
+# Compila o projeto NestJS para JavaScript.
+# O resultado estará na pasta 'dist'.
 RUN npm run build
 
-# Define a porta que a aplicação irá expor
-# A porta 8080 é a porta padrão que o Cloud Run espera
+# Define variáveis de ambiente.
+ENV NODE_ENV=production
+ENV PORT=8080
+
+# A porta que o container irá expor.
 EXPOSE 8080
 
-# Comando para rodar a aplicação
-# Ele executa as migrações do Prisma e depois inicia o servidor
-CMD ["/bin/sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# Comando para iniciar a aplicação.
+CMD ["node", "dist/src/main.js"]
