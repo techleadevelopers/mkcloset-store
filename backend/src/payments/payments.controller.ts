@@ -1,4 +1,3 @@
-// src/payments/payments.controller.ts
 import { Controller, Post, Body, UseGuards, Param, BadRequestException, Logger, Req, Headers } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { OptionalJwtAuthGuard } from 'src/auth/guards/optional-jwt-auth.guard';

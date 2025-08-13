@@ -149,7 +149,6 @@ export class PagSeguroService {
   private pagSeguroToken: string;
   private pagSeguroEmail: string; // Email da conta PagSeguro, se necessário para alguma API
   private redirectBaseUrl: string; // URL base do frontend (ngrok)
-  private notificationBaseUrl: string; // URL base do backend (ngrok)
 
   constructor(private configService: ConfigService) {
     // Carrega a URL base da API do PagSeguro (ex: https://sandbox.api.pagseguro.com)
@@ -159,27 +158,22 @@ export class PagSeguroService {
 
     // Carrega as URLs do ngrok do .env
     this.redirectBaseUrl = this.configService.get<string>('FRONTEND_URL')!; // Usando FRONTEND_URL
-    this.notificationBaseUrl = this.configService.get<string>('BACKEND_URL')!; // Usando BACKEND_URL
+    // REMOVIDO: this.notificationBaseUrl = this.configService.get<string>('BACKEND_URL')!; 
 
     // Validação de configuração
-    if (!this.pagSeguroToken || !this.redirectBaseUrl || !this.notificationBaseUrl) {
-      this.logger.error('Credenciais e/ou URLs do PagSeguro não configuradas corretamente. Verifique PAGSEGURO_API_TOKEN, FRONTEND_URL, BACKEND_URL no seu .env.');
+    if (!this.pagSeguroToken || !this.redirectBaseUrl) {
+      this.logger.error('Credenciais e/ou URLs do PagSeguro não configuradas corretamente. Verifique PAGSEGURO_API_TOKEN, FRONTEND_URL no seu .env.');
       throw new InternalServerErrorException('Credenciais e/ou URLs do PagSeguro não configuradas.');
     }
   }
 
-  // Este método createSession parece ser para uma API mais antiga do PagSeguro (V2)
-  // Se você está usando a API V4 (como sugere 'x-api-version': '4.0'),
-  // talvez não precise dele para o fluxo de checkout de redirecionamento.
-  // Mantenho-o aqui, mas com a URL correta para V2.
   async createSession() {
     const sessionUrl = `https://ws.sandbox.pagseguro.uol.com.br/v2/sessions?email=${this.pagSeguroEmail}&token=${this.pagSeguroToken}`;
     
     try {
       const response = await axios.post(sessionUrl);
-      // O retorno pode precisar ser parseado de XML para JSON, dependendo da API V2
       this.logger.log(`[PagSeguroService] Sessão PagSeguro criada: ${JSON.stringify(response.data)}`);
-      return response.data; // Retorna o ID da sessão
+      return response.data; 
     } catch (error) {
       this.logger.error('Erro ao criar sessão no PagSeguro:', error.message);
       if (axios.isAxiosError(error) && error.response) {
@@ -189,8 +183,8 @@ export class PagSeguroService {
     }
   }
 
-  // NOVO: Método para criar uma cobrança PIX
-  async createPagSeguroPixCharge(details: CreatePagSeguroPixChargeDetails): Promise<PixChargeResponseDto> {
+  // MODIFICADO: Agora recebe o 'notificationBaseUrl' como parâmetro
+  async createPagSeguroPixCharge(details: CreatePagSeguroPixChargeDetails, notificationBaseUrl: string): Promise<PixChargeResponseDto> {
     this.logger.log(`[PagSeguroService] Criando cobrança PIX para o pedido ${details.orderId}`);
 
     const cleanedPhone = details.customer.phone ? details.customer.phone.replace(/\D/g, '') : '';
@@ -198,11 +192,10 @@ export class PagSeguroService {
     let customerPhoneNumber: string;
     let customerPhoneType: 'MOBILE' | 'HOME' | 'BUSINESS';
 
-    // Lógica para telefone de teste em sandbox ou telefone real
     const isSandbox = this.pagSeguroBaseApiUrl.includes('sandbox'); 
     if (isSandbox) {
       customerPhoneArea = '11'; 
-      customerPhoneNumber = '999999999'; // Telefone de teste comum para sandbox
+      customerPhoneNumber = '999999999';
       customerPhoneType = 'MOBILE';
       this.logger.debug(`[PagSeguroService] Usando telefone de teste para sandbox: (${customerPhoneArea}) ${customerPhoneNumber}`);
     } else {
@@ -227,7 +220,6 @@ export class PagSeguroService {
       unit_amount: Math.round(item.unit_amount.toNumber() * 100),
     }));
 
-    // --- INÍCIO DA ALTERAÇÃO PARA PIX QR CODE ---
     const payload = {
       reference_id: details.orderId,
       customer: {
@@ -242,21 +234,17 @@ export class PagSeguroService {
         }],
       },
       items: itemsPayload,
-      // REMOVIDO: o objeto 'charges' para PIX QR Code
-      qr_codes: [ // ADICIONADO: o objeto 'qr_codes' conforme a documentação
+      qr_codes: [
         {
           amount: { 
-            value: Math.round(details.amount.toNumber() * 100) // Valor total do pedido em centavos
+            value: Math.round(details.amount.toNumber() * 100) 
           },
-          expiration_date: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hora de expiração (opcional, PagSeguro padrão 24h)
+          expiration_date: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
         },
       ],
-      notification_urls: [`${this.notificationBaseUrl}/payments/webhook/pagseguro`],
-      // Você pode adicionar o objeto 'shipping' aqui se for relevante para o pedido geral,
-      // mas não é estritamente necessário para a criação do QR Code em si.
-      // shipping: { ... }
+      // MODIFICADO: Agora usa o parâmetro 'notificationBaseUrl'
+      notification_urls: [`${notificationBaseUrl}/payments/webhook/pagseguro`],
     };
-    // --- FIM DA ALTERAÇÃO PARA PIX QR CODE ---
 
     this.logger.debug(`[PagSeguroService] Enviando payload para PagSeguro (${this.pagSeguroBaseApiUrl}/orders): ${JSON.stringify(payload)}`);
 
@@ -271,25 +259,22 @@ export class PagSeguroService {
 
       this.logger.log(`[PagSeguroService] Cobrança PIX criada com sucesso para o pedido ${details.orderId}.`);
       
-      // --- INÍCIO DA ALTERAÇÃO PARA PARSEAR RESPOSTA PIX QR CODE ---
-      const qrCodeResponse = response.data.qr_codes?.[0]; // QR Code está diretamente em 'qr_codes' na resposta
+      const qrCodeResponse = response.data.qr_codes?.[0];
       
       if (!qrCodeResponse) {
         throw new InternalServerErrorException('Resposta inválida do PagSeguro: QR Code não encontrado na resposta do pedido.');
       }
 
       return {
-        transactionId: response.data.id, // O ID do pedido é o transactionId principal
-        status: 'PENDING', // PIX é geralmente PENDING inicialmente
-        brCode: qrCodeResponse.text, // O código PIX (copia e cola)
-        qrCodeImage: qrCodeResponse.links?.find((link: any) => link.rel === 'QR_CODE_IMAGE')?.href, // URL da imagem do QR Code
-        expiresAt: qrCodeResponse.expiration_date, // Data de expiração do QR Code
+        transactionId: response.data.id,
+        status: 'PENDING',
+        brCode: qrCodeResponse.text,
+        qrCodeImage: qrCodeResponse.links?.find((link: any) => link.rel === 'QR_CODE_IMAGE')?.href,
+        expiresAt: qrCodeResponse.expiration_date,
         amount: details.amount.toNumber(),
         description: details.description,
         orderId: details.orderId,
       };
-      // --- FIM DA ALTERAÇÃO PARA PARSEAR RESPOSTA PIX QR CODE ---
-
     } catch (error) {
       this.logger.error(`[PagSeguroService] Erro ao criar cobrança PIX para o pedido ${details.orderId}: ${error.message}`);
       if (axios.isAxiosError(error) && error.response) {
@@ -301,8 +286,8 @@ export class PagSeguroService {
     }
   }
 
-  // NOVO: Método para processar pagamento direto com cartão de crédito
-  async processDirectCreditCardPayment(details: CreatePagSeguroCreditCardChargeDetails): Promise<any> {
+  // MODIFICADO: Agora recebe o 'notificationBaseUrl' como parâmetro
+  async processDirectCreditCardPayment(details: CreatePagSeguroCreditCardChargeDetails, notificationBaseUrl: string): Promise<any> {
     this.logger.log(`[PagSeguroService] Processando pagamento com cartão para o pedido ${details.orderId}`);
 
     const cleanedPhone = details.customer.phone ? details.customer.phone.replace(/\D/g, '') : '';
@@ -367,7 +352,6 @@ export class PagSeguroService {
           complement: details.shippingAddress.complement || null,
         },
         amount: Math.round(details.shippingPrice.toNumber() * 100), 
-        // type e service_type podem ser mais genéricos para pagamentos diretos
         type: 'FIXED', 
         service_type: 'STANDARD', 
       },
@@ -378,7 +362,7 @@ export class PagSeguroService {
         payment_method: {
           type: 'CREDIT_CARD',
           installments: details.cardDetails.installments || 1,
-          capture: true, // Captura imediata
+          capture: true,
           card: {
             token: details.cardDetails.token,
             holder: {
@@ -388,7 +372,8 @@ export class PagSeguroService {
           },
         },
       }],
-      notification_urls: [`${this.notificationBaseUrl}/payments/webhook/pagseguro`],
+      // MODIFICADO: Agora usa o parâmetro 'notificationBaseUrl'
+      notification_urls: [`${notificationBaseUrl}/payments/webhook/pagseguro`],
     };
 
     this.logger.debug(`[PagSeguroService] Enviando payload para PagSeguro (Direct Card): ${JSON.stringify(payload)}`);
@@ -411,8 +396,8 @@ export class PagSeguroService {
 
       return {
         transactionId: response.data.id,
-        status: charge.status, // APPROVED, PENDING, DECLINED, etc.
-        transactionRef: charge.id, // ID da cobrança
+        status: charge.status,
+        transactionRef: charge.id,
         amount: details.amount.toNumber(),
         description: details.description,
         orderId: details.orderId,
@@ -430,7 +415,8 @@ export class PagSeguroService {
   }
 
 
-  async createPagSeguroCheckoutRedirect(details: CreatePagSeguroCheckoutRedirectDetails): Promise<{ redirectUrl: string; pagSeguroCheckoutId: string }> {
+  // MODIFICADO: Agora recebe o 'notificationBaseUrl' como parâmetro
+  async createPagSeguroCheckoutRedirect(details: CreatePagSeguroCheckoutRedirectDetails, notificationBaseUrl: string): Promise<{ redirectUrl: string; pagSeguroCheckoutId: string }> {
     this.logger.log(`[PagSeguroService] Criando checkout de redirecionamento para o pedido ${details.orderId}`);
     this.logger.debug(`[PagSeguroService] Raw customer phone: ${details.customer.phone}`); 
 
@@ -479,7 +465,7 @@ export class PagSeguroService {
 
     const shippingServiceMap: { [key: string]: string } = {
       '4014': 'SEDEX', 
-      '41106': 'PAC',  
+      '41106': 'PAC',  
       'FIXED': 'FIXED', 
     };
     const pagSeguroShippingService = shippingServiceMap[details.shippingService] || details.shippingService;
@@ -526,7 +512,8 @@ export class PagSeguroService {
         address_modifiable: false,
       },
       redirect_url: `${this.redirectBaseUrl}/order-success?orderId=${details.orderId}`, 
-      notification_urls: [`${this.notificationBaseUrl}/payments/webhook/pagseguro`], 
+      // MODIFICADO: Agora usa o parâmetro 'notificationBaseUrl'
+      notification_urls: [`${notificationBaseUrl}/payments/webhook/pagseguro`], 
       description: details.description,
       customer_modifiable: false,
       address_modifiable: false,
@@ -595,14 +582,11 @@ export class PagSeguroService {
   async initiateRefund(transactionId: string, amount?: number): Promise<any> {
     this.logger.log(`[PagSeguroService] Iniciando reembolso para a transação ${transactionId}, valor: ${amount || 'total'}`);
 
-    // A API de reembolso do PagSeguro pode variar. Este é um exemplo hipotético.
-    // Você precisará consultar a documentação oficial do PagSeguro para a API de reembolso (API de Transações V4 ou V5).
-    const refundUrl = `${this.pagSeguroBaseApiUrl}/charges/${transactionId}/cancel`; // Exemplo para cancelar uma cobrança (reembolso total)
-    // Se for reembolso parcial, a rota e o payload podem ser diferentes.
+    const refundUrl = `${this.pagSeguroBaseApiUrl}/charges/${transactionId}/cancel`; 
 
     const payload: any = {};
     if (amount) {
-        payload.amount = { value: Math.round(amount * 100) }; // Reembolso parcial
+        payload.amount = { value: Math.round(amount * 100) }; 
     }
 
     try {
@@ -610,7 +594,7 @@ export class PagSeguroService {
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${this.pagSeguroToken}`,
-                'x-api-version': '4.0', // Ou a versão da API de reembolso
+                'x-api-version': '4.0',
             },
         });
         this.logger.log(`[PagSeguroService] Reembolso iniciado com sucesso para transação ${transactionId}.`);
