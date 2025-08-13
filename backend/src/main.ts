@@ -54,8 +54,8 @@ async function bootstrap() {
     forbidNonWhitelisted: true, // Lança um erro se propriedades não definidas no DTO forem enviadas
   }));
 
-  const port = process.env.PORT || 3001; // Define a porta, usando a variável de ambiente PORT se disponível
-  await app.listen(port);
+  const port = Number(process.env.PORT ?? 8080);
+   await app.listen(port, '0.0.0.0');
   console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();

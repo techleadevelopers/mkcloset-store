@@ -1,42 +1,37 @@
-# Stage 1: Build a development image with all dependencies
-# Usando a imagem Node.js 22 COMPLETA.
-FROM node:22 AS build 
+# Stage 1: build do backend
+FROM node:22 AS build
+WORKDIR /app/backend
 
-# Define o diretório de trabalho como a pasta do backend
-# ESSA É A PRINCIPAL MUDANÇA PARA RESOLVER O ERRO DO PRISMA
-WORKDIR /usr/src/app/backend
+# Copia só o que é necessário do backend
+COPY backend/package*.json ./
+RUN npm ci
 
-# Copia os arquivos de configuração do npm para o diretório de trabalho
-# A instrução 'COPY' agora leva em consideração a nova pasta de trabalho
-COPY ./backend/package*.json ./
+COPY backend ./
 
-# Instala as dependências
-RUN npm install
+# Gera o Prisma Client (OpenSSL 3 no Debian)
+RUN npx prisma generate
 
-# Copia todo o restante do código do backend para o diretório de trabalho
-COPY ./backend .
-
-# Agora os comandos serão executados dentro de /usr/src/app/backend
-RUN npx prisma generate # Isso agora gerará o engine debian-openssl-3.0.x
-
+# Compila o NestJS
 RUN npm run build
 
+# Log opcional para validar onde está o main
+RUN ls -la dist && (ls -la dist/src || true)
 
-# Stage 2: Create a production-ready image
-FROM node:22 AS production 
+# Stage 2: runtime mínimo
+FROM node:22-slim AS production
+WORKDIR /app/backend
 
-# Define o diretório de trabalho como a pasta do backend
-WORKDIR /usr/src/app/backend
+ENV NODE_ENV=production
+ENV PORT=8080
 
-# A instrução 'COPY --from' precisa ser ajustada para o novo diretório
-# de trabalho na imagem de build
-COPY --from=build /usr/src/app/backend/node_modules ./node_modules
-COPY --from=build /usr/src/app/backend/dist ./dist
-COPY --from=build /usr/src/app/backend/node_modules/.prisma/client ./node_modules/.prisma/client
-COPY --from=build /usr/src/app/backend/prisma/schema.prisma ./prisma/schema.prisma
+# Copia dependências e artefatos
+COPY --from=build /app/backend/node_modules ./node_modules
+COPY --from=build /app/backend/dist ./dist
+COPY --from=build /app/backend/prisma ./prisma
 
-# A variável de ambiente DATABASE_URL DEVE ser configurada NO PAINEL DO RAILWAY.
-# Não podemos usar a sintaxe do Railway no Dockerfile.
-ENV PORT 8080
 EXPOSE 8080
-CMD ["node", "dist/main.js"]
+
+# Se seu build gera dist/src/main.js (mais comum no Nest):
+CMD ["node", "dist/src/main.js"]
+# Caso você ajuste seu build para dist/main.js, mude para:
+# CMD ["node", "dist/main.js"]
