@@ -103,14 +103,12 @@ export default function Home() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-6">
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-4">
-                <div className="text-2xl sm:text-2xl lg:text-6xl font-bold text-gray-900 mb-0 relative h-32 lg:h-48"> {/* Added relative and height to parent for absolute positioning */}
-    <span className="luxurious-script-regular absolute left-0 bottom-1 transform -translate-y-1/2 rotate-[-deg] whitespace-nowrap origin-bottom-left" style={{ /* Optional: Add specific styles if needed */ }}>
-      New Collections
-    </span>
-</div>
-                <span className="block text-gradient-black font-chakra-petch">
-    Outono/Inverno
-</span>
+                <span className="block text-4xl sm:text-5xl lg:text-6xl text-gray-900 mb-2 text-gradient-dona-carioca">
+                  Novidades
+                </span>
+                <span className="block text-gradient-black text-2xl sm:text-3xl lg:text-4xl">
+                  Outono/Inverno
+                </span>
               </h2>
               <p className="text-base sm:text-lg lg:text-xl text-gray-600 mb-6 leading-relaxed">
                 Descubra as últimas tendências em moda feminina. Peças exclusivas com design contemporâneo e qualidade premium.
@@ -130,11 +128,11 @@ export default function Home() {
             </div>
             <div className="relative">
               {/* Carrossel de Imagens */}
-              <div className="overflow-hidden rounded-2xl shadow-2xl">
+              <div className="overflow-hidden rounded-2xl shadow-2xl aspect-[3/4]">
                 <img
                   src={images[currentImageIndex]}
                   alt="Modelo usando vestido elegante da nova coleção"
-                  className="w-full h-[810px] object-cover rounded-2xl mb-0 transition-opacity duration-500"
+                  className="w-full h-full object-cover transition-opacity duration-500"
                 />
               </div>
               <div className="absolute -bottom-6 -left-6 bg-white rounded-xl p-4 shadow-xl">
@@ -177,7 +175,7 @@ export default function Home() {
                       <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto rounded-full overflow-hidden bg-gray-100 group-hover:shadow-lg transition-all duration-300">
                         <img
                           src={category.imageUrl || getCategoryImageUrl(category.name)} // Usa URL do backend ou a local
-                          alt={category.name}
+                          alt={category.name} // Adicionado alt text para acessibilidade
                           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                         />
                       </div>

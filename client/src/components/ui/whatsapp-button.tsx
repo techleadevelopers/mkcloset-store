@@ -12,7 +12,7 @@ interface WhatsAppButtonProps {
 }
 
 export default function WhatsAppButton({ 
-  phoneNumber = "5511999999999", 
+  phoneNumber = "5519997023214", 
   message = "Olá! Gostaria de saber mais sobre os produtos da MKcloset.",
   className = ""
 }: WhatsAppButtonProps) {

@@ -34,6 +34,6 @@ export default defineConfig({
       deny: ["**/.*"],
     },
     // Adicione a configuração server.allowedHosts aqui 👇
-    allowedHosts: ["https://mkcloset-backend-586033150214.southamerica-east1.run.app", "localhost"],
+    allowedHosts: ["https://mkcloset-backend-586033150214.southamerica-east1.run.app/api", "localhost"],
   },
 });

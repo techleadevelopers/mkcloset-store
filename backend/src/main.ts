@@ -5,21 +5,24 @@ import { ValidationPipe } from '@nestjs/common';
 import { json } from 'express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as process from 'process';
+import { ConfigService } from '@nestjs/config';
 
 async function bootstrap() {
   try {
     const app = await NestFactory.create(AppModule, {
-      // Adicionamos um logger para ver a causa exata da falha.
       logger: ['error', 'warn', 'log', 'debug', 'verbose'],
     });
 
-    // URLs permitidas para CORS
+    // 1. Adicione esta linha para definir o prefixo global da API
+    app.setGlobalPrefix('api');
+
+    const configService = app.get(ConfigService);
     const allowedOrigins = [
       'http://localhost:5173',
       'https://e1688003a97e.ngrok-free.app',
+      'https://bymkcloset.com.br/'
     ];
 
-    // Habilita CORS
     app.enableCors({
       origin: (origin, callback) => {
         if (!origin) {
@@ -35,7 +38,6 @@ async function bootstrap() {
       credentials: true,
     });
 
-    // Configuração para obter o rawBody para webhooks
     app.use(
       json({
         verify: (req: any, res, buf) => {
@@ -44,7 +46,6 @@ async function bootstrap() {
       }),
     );
 
-    // Habilita validação global de DTOs
     app.useGlobalPipes(
       new ValidationPipe({
         transform: true,
@@ -53,7 +54,6 @@ async function bootstrap() {
       }),
     );
 
-    // Configuração do Swagger
     const swaggerConfig = new DocumentBuilder()
       .setTitle('API Mkcloset')
       .setDescription('Documentação da API da Mkcloset')
@@ -61,10 +61,12 @@ async function bootstrap() {
       .addBearerAuth()
       .build();
     const document = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup('api', app, document);
 
-    // A porta deve vir da variável de ambiente 'PORT' do Cloud Run.
-    const port = Number(process.env.PORT || 3001);
+    // 2. Alinhe a documentação do Swagger para a raiz do prefixo global
+    // Isso fará com que ela seja acessível em /api
+    SwaggerModule.setup('', app, document);
+
+    const port = configService.get<number>('PORT') || 3001;
     await app.listen(port, '0.0.0.0');
 
     console.log(`Aplicação iniciada com sucesso. Acesse: ${await app.getUrl()}`);

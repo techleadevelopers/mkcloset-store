@@ -7,11 +7,11 @@ export default {
     extend: {
       fontFamily: {
         abel: ['Abel', 'sans-serif'],
-        'chakra-petch': ['"Chakra Petch"', 'sans-serif'], // Adicionada Chakra Petch
-        gruppo: ['Gruppo', 'sans-serif'],                   // Adicionada Gruppo
+        'chakra-petch': ['"Chakra Petch"', 'sans-serif'],
+        gruppo: ['Gruppo', 'sans-serif'],
         'luxurious-script': ['"Luxurious Script"', 'cursive'],
         'monsieur-la-doulaise': ['"Monsieur La Doulaise"', 'cursive'],
-        poppins: ['Poppins', 'sans-serif'], // Mantida Poppins caso queira usar
+        poppins: ['Poppins', 'sans-serif'],
       },
       borderRadius: {
         lg: "var(--radius)",

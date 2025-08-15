@@ -67,7 +67,8 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Montserrat', sans-serif; /* FONTE PADRÃO DO PROJETO */
+    /* Fonte estilo Dona Carioca */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif;
   }
 
   .font-poppins {
@@ -80,8 +81,16 @@
 }
 
 @layer utilities {
+  /* Gradiente mais sutil e elegante */
   .text-gradient-black {
     background: linear-gradient(135deg, #000000, #4a5568);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  /* Nova classe para replicar o gradiente */
+  .text-gradient-dona-carioca {
+    background: linear-gradient(145deg, #1f2937, #4b5563, #6b7280);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

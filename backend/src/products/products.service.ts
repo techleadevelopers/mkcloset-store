@@ -61,7 +61,33 @@ export class ProductsService {
       skip,
     });
 
-    return products.map(product => new ProductEntity(product));
+    // CORRIGIDO: Lógica para construir o caminho completo da imagem
+    const productsWithCorrectPath = products.map(product => {
+      let folderName = '';
+      const productName = product.name.toLowerCase();
+
+      // Mapeia o nome do produto para a subpasta correspondente
+      if (productName.includes('julia')) {
+        folderName = 'conjunto-julia';
+      } else if (productName.includes('glamour')) {
+        folderName = 'conjunto-glamour';
+      } else if (productName.includes('olivia')) {
+        folderName = 'conjunto-olivia';
+      }
+
+      // Se o produto tiver uma imagem e uma subpasta, constrói a URL completa
+      if (product.images && product.images.length > 0 && folderName) {
+        // CORREÇÃO: Usa 'product.images[0]' no lugar de 'product.imageUrl'
+        product.images[0] = `/images/${folderName}/${product.images[0]}`;
+      } else {
+        // Se não tiver imagem, defina um valor padrão ou null
+        // Depende de como seu front-end lida com a ausência de imagens
+      }
+
+      return new ProductEntity(product);
+    });
+
+    return productsWithCorrectPath;
   }
 
   async findFeatured(): Promise<ProductEntity[]> {
