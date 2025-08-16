@@ -15,14 +15,10 @@ import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { Product, Category } from '@/types/backend'; // Importa as interfaces do backend
 
-// URL base do seu backend para as imagens
-const BACKEND_URL = 'https://mkcloset-backend-586033150214.southamerica-east1.run.app';
-
 export default function Home() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   // Array de imagens atualizado para o carrossel da Hero Section
-  // Estes caminhos são relativos e precisam ser prefixados com a URL do backend
   const images = [
     "/images/frente.jpg", // Conjunto Julia - frente
     "/images/tras.jpg",   // Conjunto Julia - trás (também para Vestidos)
@@ -84,7 +80,6 @@ export default function Home() {
   }, [images.length]);
 
   // Lógica para alinhar as imagens das categorias (mantida no frontend por enquanto)
-  // Estes são fallbacks locais, mas devem ser tratados como caminhos do backend
   const getCategoryImageUrl = (categoryName: string) => {
     switch (categoryName) {
       case 'Vestido': return '/images/tras.jpg';
@@ -134,9 +129,8 @@ export default function Home() {
             <div className="relative">
               {/* Carrossel de Imagens */}
               <div className="overflow-hidden rounded-2xl shadow-2xl aspect-[3/4]">
-                {/* APLICAÇÃO DO BACKEND_URL AQUI */}
                 <img
-                  src={`${BACKEND_URL}${images[currentImageIndex]}`}
+                  src={images[currentImageIndex]}
                   alt="Modelo usando vestido elegante da nova coleção"
                   className="w-full h-full object-cover transition-opacity duration-500"
                 />
@@ -179,9 +173,8 @@ export default function Home() {
                   <div className="group text-center cursor-pointer">
                     <div className="mb-3 sm:mb-4 relative">
                       <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto rounded-full overflow-hidden bg-gray-100 group-hover:shadow-lg transition-all duration-300">
-                        {/* APLICAÇÃO DO BACKEND_URL AQUI para category.imageUrl e fallback */}
                         <img
-                          src={category.imageUrl ? `${BACKEND_URL}${category.imageUrl}` : `${BACKEND_URL}${getCategoryImageUrl(category.name)}`}
+                          src={category.imageUrl || getCategoryImageUrl(category.name)} // Usa URL do backend ou a local
                           alt={category.name} // Adicionado alt text para acessibilidade
                           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                         />
@@ -234,8 +227,6 @@ export default function Home() {
             ) : (
               // Garantir que featuredProducts é um array antes de usar slice
               featuredProducts?.slice(0, 4).map((product) => (
-                // ProductCard deve lidar com a URL base do backend internamente,
-                // se ele renderiza imagens do produto.
                 <ProductCard key={product.id} product={product} />
               ))
             )}
