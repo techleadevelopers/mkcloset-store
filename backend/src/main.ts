@@ -20,7 +20,7 @@ async function bootstrap() {
     const allowedOrigins = [
       'http://localhost:5173',
       'https://e1688003a97e.ngrok-free.app',
-      'https://bymkcloset.com.br/'
+      'https://www.bymkcloset.com.br'
     ];
 
     app.enableCors({
