@@ -22,6 +22,9 @@ import { apiRequest } from '@/lib/queryClient';
 import { Product } from '@/types/backend'; // Importa a interface Product do backend
 import { cn } from '@/lib/utils';
 
+// URL base do seu backend para as imagens
+const BACKEND_URL = 'https://mkcloset-backend-586033150214.southamerica-east1.run.app';
+
 export default function ProductDetail() {
   const [, params] = useRoute('/product/:id');
   const [, setLocation] = useLocation();
@@ -231,8 +234,9 @@ export default function ProductDetail() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
             <div className="space-y-4">
               <div className="relative aspect-square bg-gray-100 rounded-2xl overflow-hidden">
+                {/* Correção da URL da imagem principal */}
                 <img
-                  src={product.images?.[0] || 'https://placehold.co/600x800/e2e8f0/ffffff?text=Sem+Imagem'}
+                  src={product.images?.[0] ? `${BACKEND_URL}${product.images[0]}` : 'https://placehold.co/600x800/e2e8f0/ffffff?text=Sem+Imagem'}
                   alt={product.name}
                   className="w-full h-full object-cover"
                 />
@@ -251,7 +255,8 @@ export default function ProductDetail() {
                 <div className="grid grid-cols-4 gap-2">
                   {product.images.map((img, index) => (
                     <div key={index} className="aspect-square bg-gray-100 rounded-lg overflow-hidden cursor-pointer">
-                      <img src={img} alt={`${product.name} - ${index + 1}`} className="w-full h-full object-cover" />
+                      {/* Correção da URL das imagens em miniatura */}
+                      <img src={`${BACKEND_URL}${img}`} alt={`${product.name} - ${index + 1}`} className="w-full h-full object-cover" />
                     </div>
                   ))}
                 </div>
