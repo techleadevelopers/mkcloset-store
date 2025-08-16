@@ -9,7 +9,7 @@ type UnauthorizedBehavior = "returnNull" | "throw";
 // IMPORTANTE: Use uma variável de ambiente para a URL da API para produção e um fallback para desenvolvimento.
 // O backend na Cloud Run (produção) deve ter a variável 'VITE_BACKEND_API_URL' definida (no .env do frontend).
 // Para desenvolvimento local, 'http://localhost:3001' é o padrão.
-const API_BASE_URL = import.meta.env.VITE_BACKEND_API_URL || "https://bf8fb8d10dda.ngrok-free.app";
+const API_BASE_URL = import.meta.env.VITE_BACKEND_API_URL || "https://mkcloset-backend-586033150214.southamerica-east1.run.app/api";
 
 /**
  * Função auxiliar para obter ou gerar um guestId.

@@ -218,3 +218,4 @@ export default function Products() {
     </div>
   );
 }
+import { ProductEntity } from '../../../backend/src/products/entities/product.entity'; // Certifique-se de que o caminho está correto
